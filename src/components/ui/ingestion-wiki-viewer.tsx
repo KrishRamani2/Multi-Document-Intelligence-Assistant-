@@ -33,6 +33,10 @@ import {
   GitBranchIcon,
   ActivityIcon,
   HighlighterIcon,
+  NetworkIcon,
+  SearchIcon,
+  SplitIcon,
+  BoxIcon,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -567,6 +571,124 @@ function TemporalMetadataCard({ temporal }: { temporal: TemporalMetadata }) {
   );
 }
 
+// ─── Chunk Explorer Card ────────────────────────────────────────────────────
+
+function ChunkExplorerCard({ chunk, index, variant }: {
+  chunk: any; index: number; variant: "hierarchical" | "recursive";
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const isHier = variant === "hierarchical";
+  const borderColor = isHier ? "border-blue-500/20" : "border-emerald-500/20";
+  const bgColor = isHier ? "bg-blue-500/5" : "bg-emerald-500/5";
+  const badgeColor = isHier ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400";
+  const accentColor = isHier ? "text-blue-400" : "text-emerald-400";
+
+  const charSpan = (chunk.end_char || 0) - (chunk.start_char || 0);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(chunk.text || "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className={cn("rounded-xl border p-0 overflow-hidden cursor-pointer hover:shadow-md transition-all", borderColor)}
+      onClick={() => setExpanded(!expanded)}
+    >
+      {/* Card Header */}
+      <div className={cn("px-4 py-3.5 flex items-start justify-between gap-3", bgColor)}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="text-[13px] font-semibold text-[var(--foreground)]">
+              #{index + 1}
+            </span>
+            <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full", badgeColor)}>
+              {chunk.level || variant}
+            </span>
+            <span className="text-[10px] font-mono text-[var(--muted)]">
+              chars {chunk.start_char}–{chunk.end_char}
+            </span>
+            {charSpan > 0 && (
+              <span className="text-[10px] text-[var(--muted)] opacity-60">
+                ({charSpan} chars)
+              </span>
+            )}
+          </div>
+          {chunk.heading_path && (
+            <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mb-1">
+              <BookOpenIcon className="w-3 h-3 shrink-0" />
+              <span className="truncate">{chunk.heading_path}</span>
+            </div>
+          )}
+          <p className={cn("text-[13px] leading-relaxed text-[var(--foreground)]", expanded ? "" : "line-clamp-2")}>
+            {chunk.text}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 pt-0.5">
+          <button
+            onClick={handleCopy}
+            className={cn(
+              "text-[11px] px-2 py-0.5 rounded-md border transition-colors",
+              copied
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-[var(--surface-hover)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+            )}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+          <ChevronDownIcon className={cn("w-4 h-4 text-[var(--muted)] transition-transform", expanded ? "rotate-180" : "")} />
+        </div>
+      </div>
+
+      {/* Expanded Details */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 py-3 border-t border-[var(--border)] bg-[var(--surface-raised)] space-y-2">
+              {chunk.chunk_id && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-medium w-20 shrink-0">ID</span>
+                  <span className="text-[11px] font-mono text-[var(--foreground)] truncate">{chunk.chunk_id}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-medium w-20 shrink-0">Level</span>
+                <span className={cn("text-[11px] font-medium", accentColor)}>{chunk.level || variant}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-medium w-20 shrink-0">Span</span>
+                <span className="text-[11px] font-mono text-[var(--foreground)]">{chunk.start_char} → {chunk.end_char} ({charSpan} chars)</span>
+              </div>
+              {/* Character position bar */}
+              <div className="mt-2">
+                <div className="w-full h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full", isHier ? "bg-blue-500" : "bg-emerald-500")}
+                    style={{ width: "100%", opacity: 0.6 }}
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export function IngestionWikiViewer() {
@@ -590,6 +712,16 @@ export function IngestionWikiViewer() {
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [highlightStats, setHighlightStats] = useState<{ total_chunks: number; highlighted: number; missing: number; pages_processed: number } | null>(null);
   const [highlightError, setHighlightError] = useState<string | null>(null);
+
+  // Main view tab: Pipeline vs Chunk Explorer
+  const [mainViewTab, setMainViewTab] = useState<"pipeline" | "chunks">("pipeline");
+
+  // Chunk Explorer API data (fetched from dedicated endpoints)
+  const [apiHierarchicalChunks, setApiHierarchicalChunks] = useState<any[]>([]);
+  const [apiRecursiveChunks, setApiRecursiveChunks] = useState<any[]>([]);
+  const [chunkExplorerLoading, setChunkExplorerLoading] = useState(false);
+  const [chunkExplorerLoaded, setChunkExplorerLoaded] = useState<string | null>(null);
+  const [chunkSearchQuery, setChunkSearchQuery] = useState("");
 
   // ── Load jobs ────────────────────────────────────────────────────────────
   const loadJobs = useCallback(() => {
@@ -1069,140 +1201,309 @@ export function IngestionWikiViewer() {
           </div>
         )}
 
-        {/* Pipeline */}
-        <div className="max-w-3xl mx-auto py-10 px-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider">Processing Pipeline</h2>
-              <p className="text-[12px] text-[var(--muted)] mt-1 opacity-70">
-                {completedStages} of {renderJob.stages.length} stages complete
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-1.5">
-              <div className="w-40 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
-                <motion.div
-                  className={cn("h-full rounded-full",
-                    renderJob.status === "completed" ? "bg-emerald-500" :
-                    renderJob.status === "failed"    ? "bg-red-500" : "bg-blue-500"
-                  )}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(completedStages / renderJob.stages.length) * 100}%` }}
-                  transition={{ duration: 0.5 }}
-                />
-              </div>
-              <span className="text-[11px] text-[var(--muted)] font-mono">
-                {Math.round((completedStages / renderJob.stages.length) * 100)}%
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-0 relative">
-            {renderJob.stages.map((stage, idx) => (
-              <StageRow key={stage.id} stage={stage} index={idx} isLast={idx === renderJob.stages.length - 1} />
+        {/* ── Top-Level View Tabs ── */}
+        <div className="sticky top-[73px] z-[9] bg-[var(--background)] border-b border-[var(--border)] px-8">
+          <div className="max-w-3xl mx-auto flex gap-1 py-1">
+            {[
+              { key: "pipeline" as const, label: "Pipeline", icon: CpuIcon },
+              { key: "chunks" as const, label: "Chunk Explorer", icon: NetworkIcon },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  setMainViewTab(tab.key);
+                  // Auto-fetch chunk explorer data when switching to it
+                  if (tab.key === "chunks" && renderJob.status === "completed") {
+                    const docId = (() => {
+                      if (!selectedJob) return null;
+                      const d = jobDetails[selectedJob.job_id];
+                      return d?.document_id || selectedJob.document_id || null;
+                    })();
+                    if (docId && chunkExplorerLoaded !== docId) {
+                      setChunkExplorerLoading(true);
+                      Promise.all([
+                        fetch(`/api/proxy/documents/${docId}/hierarchical`).then(r => r.ok ? r.json() : null),
+                        fetch(`/api/proxy/documents/${docId}/recursive`).then(r => r.ok ? r.json() : null),
+                      ]).then(([hier, rec]) => {
+                        setApiHierarchicalChunks(hier?.chunks || []);
+                        setApiRecursiveChunks(rec?.chunks || []);
+                        setChunkExplorerLoaded(docId);
+                      }).catch(console.error).finally(() => setChunkExplorerLoading(false));
+                    }
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-lg transition-all",
+                  mainViewTab === tab.key
+                    ? "bg-[var(--surface-hover)] text-[var(--foreground)] shadow-sm border border-[var(--border)]"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)] border border-transparent"
+                )}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </button>
             ))}
           </div>
-
-          {/* ── Temporal Metadata ── */}
-          {currentDocData?.temporal_metadata && (
-            <div className="mt-10">
-              <h2 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
-                Temporal Metadata
-              </h2>
-              <TemporalMetadataCard temporal={currentDocData.temporal_metadata} />
-            </div>
-          )}
         </div>
 
-        {/* ── Hierarchical Chunks ── */}
-        {currentDocData && (
-          <div className="max-w-3xl mx-auto px-8 pb-16">
-            <div className="border-t border-[var(--border)] pt-10">
-              <div className="flex items-center justify-between mb-6">
+        {/* ═══════════════ PIPELINE VIEW ═══════════════ */}
+        {mainViewTab === "pipeline" && (
+          <>
+            {/* Pipeline */}
+            <div className="max-w-3xl mx-auto py-10 px-8">
+              <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h2 className="text-lg font-semibold tracking-tight">Hierarchical Chunks</h2>
-                  <p className="text-[13px] text-[var(--muted)] mt-1">
-                    {currentDocData.sections_count + currentDocData.passages_count + currentDocData.sentences_count} chunks across 3 semantic levels
+                  <h2 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider">Processing Pipeline</h2>
+                  <p className="text-[12px] text-[var(--muted)] mt-1 opacity-70">
+                    {completedStages} of {renderJob.stages.length} stages complete
                   </p>
                 </div>
-                {currentDocData.embedding_info && (
-                  <div className="text-right text-[11px] text-[var(--muted)]">
-                    <p>Embeddings: <span className={cn("font-medium", currentDocData.embedding_info.generated ? "text-emerald-500" : "text-amber-500")}>
-                      {currentDocData.embedding_info.generated ? "Generated" : "Pending"}
-                    </span></p>
-                    <p className="mt-0.5 opacity-70">{currentDocData.embedding_info.model}</p>
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="w-40 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
+                    <motion.div
+                      className={cn("h-full rounded-full",
+                        renderJob.status === "completed" ? "bg-emerald-500" :
+                        renderJob.status === "failed"    ? "bg-red-500" : "bg-blue-500"
+                      )}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(completedStages / renderJob.stages.length) * 100}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
                   </div>
-                )}
+                  <span className="text-[11px] text-[var(--muted)] font-mono">
+                    {Math.round((completedStages / renderJob.stages.length) * 100)}%
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-6">
-                {[
-                  { label: "Sections",  count: currentDocData.sections_count,  colorClass: "border-violet-500/20 bg-violet-500/5 text-violet-400" },
-                  { label: "Passages",  count: currentDocData.passages_count,  colorClass: "border-blue-500/20 bg-blue-500/5 text-blue-400" },
-                  { label: "Sentences", count: currentDocData.sentences_count, colorClass: "border-amber-500/20 bg-amber-500/5 text-amber-400" },
-                ].map(({ label, count, colorClass }) => (
-                  <div key={label} className={cn("rounded-xl border p-4 text-center", colorClass)}>
-                    <p className="text-2xl font-bold">{count}</p>
-                    <p className="text-[11px] text-[var(--muted)] mt-1">{label}</p>
-                  </div>
+              <div className="space-y-0 relative">
+                {renderJob.stages.map((stage, idx) => (
+                  <StageRow key={stage.id} stage={stage} index={idx} isLast={idx === renderJob.stages.length - 1} />
                 ))}
               </div>
 
-              <div className="flex gap-1 mb-6 bg-[var(--surface-raised)] border border-[var(--border)] rounded-xl p-1">
-                {chunkTabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveChunkTab(tab.key)}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[13px] font-medium transition-colors",
-                      activeChunkTab === tab.key
-                        ? "bg-[var(--surface-hover)] text-[var(--foreground)] shadow-sm"
-                        : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                    )}
-                  >
-                    <tab.icon className="w-4 h-4" />
-                    {tab.label}
-                    {tab.count !== undefined && (
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full",
-                        activeChunkTab === tab.key
-                          ? "bg-[var(--foreground)]/10 text-[var(--foreground)]"
-                          : "bg-[var(--surface-hover)] text-[var(--muted)]"
-                      )}>{tab.count}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                {activeChunks.length > 0
-                  ? activeChunks.map((chunk, idx) => <ChunkCard key={chunk.chunk_id || idx} chunk={chunk} index={idx} />)
-                  : (
-                    <div className="text-center py-12 text-[var(--muted)]">
-                      <LayersIcon className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                      <p className="text-sm">No {activeChunkTab} found.</p>
-                    </div>
-                  )
-                }
-              </div>
-
-              {currentDocData.recursive_chunks?.length > 0 && (
-                <div className="mt-10 border-t border-[var(--border)] pt-8">
-                  <h3 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
-                    Recursive Chunks ({currentDocData.recursive_chunks_count})
-                  </h3>
-                  <div className="space-y-3">
-                    {currentDocData.recursive_chunks.map((chunk, idx) => (
-                      <div key={chunk.chunk_id || idx} className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">recursive</span>
-                          <span className="text-[10px] font-mono text-[var(--muted)]">chars {chunk.start_char}–{chunk.end_char}</span>
-                        </div>
-                        <p className="text-[13px] text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">{chunk.text}</p>
-                      </div>
-                    ))}
-                  </div>
+              {/* ── Temporal Metadata ── */}
+              {currentDocData?.temporal_metadata && (
+                <div className="mt-10">
+                  <h2 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
+                    Temporal Metadata
+                  </h2>
+                  <TemporalMetadataCard temporal={currentDocData.temporal_metadata} />
                 </div>
               )}
             </div>
+
+            {/* ── Hierarchical Chunks (inline) ── */}
+            {currentDocData && (
+              <div className="max-w-3xl mx-auto px-8 pb-16">
+                <div className="border-t border-[var(--border)] pt-10">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-lg font-semibold tracking-tight">Hierarchical Chunks</h2>
+                      <p className="text-[13px] text-[var(--muted)] mt-1">
+                        {currentDocData.sections_count + currentDocData.passages_count + currentDocData.sentences_count} chunks across 3 semantic levels
+                      </p>
+                    </div>
+                    {currentDocData.embedding_info && (
+                      <div className="text-right text-[11px] text-[var(--muted)]">
+                        <p>Embeddings: <span className={cn("font-medium", currentDocData.embedding_info.generated ? "text-emerald-500" : "text-amber-500")}>
+                          {currentDocData.embedding_info.generated ? "Generated" : "Pending"}
+                        </span></p>
+                        <p className="mt-0.5 opacity-70">{currentDocData.embedding_info.model}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    {[
+                      { label: "Sections",  count: currentDocData.sections_count,  colorClass: "border-violet-500/20 bg-violet-500/5 text-violet-400" },
+                      { label: "Passages",  count: currentDocData.passages_count,  colorClass: "border-blue-500/20 bg-blue-500/5 text-blue-400" },
+                      { label: "Sentences", count: currentDocData.sentences_count, colorClass: "border-amber-500/20 bg-amber-500/5 text-amber-400" },
+                    ].map(({ label, count, colorClass }) => (
+                      <div key={label} className={cn("rounded-xl border p-4 text-center", colorClass)}>
+                        <p className="text-2xl font-bold">{count}</p>
+                        <p className="text-[11px] text-[var(--muted)] mt-1">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-1 mb-6 bg-[var(--surface-raised)] border border-[var(--border)] rounded-xl p-1">
+                    {chunkTabs.map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveChunkTab(tab.key)}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[13px] font-medium transition-colors",
+                          activeChunkTab === tab.key
+                            ? "bg-[var(--surface-hover)] text-[var(--foreground)] shadow-sm"
+                            : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                        )}
+                      >
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                        {tab.count !== undefined && (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full",
+                            activeChunkTab === tab.key
+                              ? "bg-[var(--foreground)]/10 text-[var(--foreground)]"
+                              : "bg-[var(--surface-hover)] text-[var(--muted)]"
+                          )}>{tab.count}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    {activeChunks.length > 0
+                      ? activeChunks.map((chunk, idx) => <ChunkCard key={chunk.chunk_id || idx} chunk={chunk} index={idx} />)
+                      : (
+                        <div className="text-center py-12 text-[var(--muted)]">
+                          <LayersIcon className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                          <p className="text-sm">No {activeChunkTab} found.</p>
+                        </div>
+                      )
+                    }
+                  </div>
+
+                  {currentDocData.recursive_chunks?.length > 0 && (
+                    <div className="mt-10 border-t border-[var(--border)] pt-8">
+                      <h3 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
+                        Recursive Chunks ({currentDocData.recursive_chunks_count})
+                      </h3>
+                      <div className="space-y-3">
+                        {currentDocData.recursive_chunks.map((chunk, idx) => (
+                          <div key={chunk.chunk_id || idx} className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">recursive</span>
+                              <span className="text-[10px] font-mono text-[var(--muted)]">chars {chunk.start_char}–{chunk.end_char}</span>
+                            </div>
+                            <p className="text-[13px] text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">{chunk.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══════════════ CHUNK EXPLORER VIEW ═══════════════ */}
+        {mainViewTab === "chunks" && (
+          <div className="max-w-4xl mx-auto py-8 px-8 pb-16">
+            {renderJob.status !== "completed" ? (
+              <div className="text-center py-20 text-[var(--muted)]">
+                <NetworkIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
+                <p className="text-sm font-medium">Waiting for ingestion to complete</p>
+                <p className="text-[12px] opacity-60 mt-1">Chunk data will be available once processing finishes.</p>
+              </div>
+            ) : chunkExplorerLoading ? (
+              <div className="text-center py-20">
+                <Loader2Icon className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
+                <p className="text-sm text-[var(--muted)]">Fetching chunk data from API…</p>
+              </div>
+            ) : (
+              <>
+                {/* Search Bar */}
+                <div className="mb-6">
+                  <div className="relative">
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted)]" />
+                    <input
+                      type="text"
+                      placeholder="Search chunks by text, heading, or ID…"
+                      value={chunkSearchQuery}
+                      onChange={(e) => setChunkSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-raised)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-xl focus:outline-none focus:border-[var(--primary)] placeholder:text-[var(--muted)] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Stats Row */}
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                        <SplitIcon className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--foreground)]">Hierarchical Chunks</h3>
+                        <p className="text-[11px] text-[var(--muted)]">Passages extracted from document structure</p>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-blue-400">{apiHierarchicalChunks.length}</span>
+                      <span className="text-[12px] text-[var(--muted)]">chunks</span>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                        <BoxIcon className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--foreground)]">Recursive Chunks</h3>
+                        <p className="text-[11px] text-[var(--muted)]">Full document merged into recursive blocks</p>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-emerald-400">{apiRecursiveChunks.length}</span>
+                      <span className="text-[12px] text-[var(--muted)]">chunks</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Hierarchical Chunks Section ── */}
+                <div className="mb-10">
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <div className="w-1 h-6 rounded-full bg-blue-500" />
+                    <h2 className="text-base font-semibold text-[var(--foreground)]">Hierarchical Passages</h2>
+                  </div>
+                  <div className="space-y-3">
+                    {(chunkSearchQuery
+                      ? apiHierarchicalChunks.filter((c: any) =>
+                          c.text?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
+                          c.heading_path?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
+                          c.chunk_id?.toLowerCase().includes(chunkSearchQuery.toLowerCase())
+                        )
+                      : apiHierarchicalChunks
+                    ).map((chunk: any, idx: number) => (
+                      <ChunkExplorerCard key={chunk.chunk_id || idx} chunk={chunk} index={idx} variant="hierarchical" />
+                    ))}
+                    {apiHierarchicalChunks.length === 0 && (
+                      <div className="text-center py-10 text-[var(--muted)]">
+                        <SplitIcon className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                        <p className="text-sm">No hierarchical chunks available.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Recursive Chunks Section ── */}
+                <div>
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <div className="w-1 h-6 rounded-full bg-emerald-500" />
+                    <h2 className="text-base font-semibold text-[var(--foreground)]">Recursive Blocks</h2>
+                  </div>
+                  <div className="space-y-3">
+                    {(chunkSearchQuery
+                      ? apiRecursiveChunks.filter((c: any) =>
+                          c.text?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
+                          c.chunk_id?.toLowerCase().includes(chunkSearchQuery.toLowerCase())
+                        )
+                      : apiRecursiveChunks
+                    ).map((chunk: any, idx: number) => (
+                      <ChunkExplorerCard key={chunk.chunk_id || idx} chunk={chunk} index={idx} variant="recursive" />
+                    ))}
+                    {apiRecursiveChunks.length === 0 && (
+                      <div className="text-center py-10 text-[var(--muted)]">
+                        <BoxIcon className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                        <p className="text-sm">No recursive chunks available.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
