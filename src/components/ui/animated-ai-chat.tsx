@@ -62,6 +62,10 @@ export function AnimatedAIChat() {
     const [isRecording, setIsRecording] = useState(false);
     const [, startTransition] = useTransition();
     
+    // Audio refs
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+
     // AutoResize
     const { textareaRef, adjustHeight } = useAutoResizeTextarea({
         minHeight: 44,
@@ -95,23 +99,67 @@ export function AnimatedAIChat() {
         setAttachments((prev) => [...prev, mockFileName]);
     };
 
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                stream.getTracks().forEach(track => track.stop());
+
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+
+                try {
+                    setValue(v => v + (v ? " " : "") + "*(Transcribing...)*");
+                    
+                    const response = await fetch('/api/transcribe', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        setValue(v => v.replace("*(Transcribing...)*", data.transcript || ""));
+                    } else {
+                        console.error('Transcription failed');
+                        setValue(v => v.replace("*(Transcribing...)*", "*(Error transcribing audio)*"));
+                    }
+                } catch (error) {
+                    console.error('Error during transcription fetch:', error);
+                    setValue(v => v.replace("*(Transcribing...)*", "*(Error transcribing audio)*"));
+                }
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            alert("Could not access microphone.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+        setIsRecording(false);
+    };
+
     const handleToggleAudio = () => {
         if (isRecording) {
-            setIsRecording(false);
-            setAttachments((prev) => [...prev, `audio-message-${Math.floor(Math.random() * 1000)}.mp3`]);
+            stopRecording();
         } else {
-            setIsRecording(true);
-            
-            // Auto stop recording after 5 seconds for demonstration purposes
-            setTimeout(() => {
-                setIsRecording(current => {
-                    if (current) {
-                        setAttachments((prev) => [...prev, `audio-message-${Math.floor(Math.random() * 1000)}.mp3`]);
-                        return false;
-                    }
-                    return current;
-                });
-            }, 5000);
+            startRecording();
         }
     };
 
