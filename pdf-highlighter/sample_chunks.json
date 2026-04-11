@@ -1,0 +1,22 @@
+{
+  "document_id": "33ee7bf7-ec3e-4bba-a017-bb119e21f61d",
+  "local_path": "downloads/sample_three_page_document.pdf",
+  "hierarchical_chunks": {
+    "sections": [
+      {
+        "chunk_id": "cea3dc8f-8598-4625-b037-490d173a219f",
+        "text": "This document demonstrates a properly structured PDF with hierarchical headings, tables, and images.",
+        "start_char": 42,
+        "end_char": 243,
+        "heading_path": "Three-Page Sample Document with Hierarchy > 1. Introduction"
+      },
+      {
+        "chunk_id": "e0c6aec1-c3ed-47c6-8e1e-fa74b5036d90",
+        "text": "ID 1 2 3 4 Name Alice Bob Charlie Diana Department Engineering Marketing Finance HR Score 85 90 88 92",
+        "start_char": 260,
+        "end_char": 361,
+        "heading_path": "Three-Page Sample Document with Hierarchy > 2. Data Table Section"
+      }
+    ]
+  }
+}

@@ -35,7 +35,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     { name: "New Chat", icon: MessageSquarePlusIcon, href: "/chat" },
     { name: "Ingestion Wiki", icon: BookOpenIcon, href: "/chat/ingestion-wiki" },
     { name: "Knowledge Graph", icon: NetworkIcon, href: "/chat/knowledge-graph" },
-    { name: "Data Sources", icon: DatabaseIcon, href: "#" },
+    { name: "Data Sources", icon: DatabaseIcon, href: "/chat/data-sources" },
   ];
 
   const pastChats = [
@@ -45,12 +45,63 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     { title: "API Refactoring Plan", time: "2d" },
   ];
 
-  // Sidebar upload success handler — logs to console
-  const handleSidebarUploadSuccess = (e: any) => {
+  // Helper to figure out the source_type for the backend
+  const determineSourceType = (fileName: string) => {
+    const fn = fileName.toLowerCase();
+    if (fn.endsWith('.pdf')) return 'pdf';
+    if (fn.endsWith('.docx') || fn.endsWith('.doc')) return 'docx';
+    if (fn.endsWith('.csv')) return 'csv';
+    if (fn.match(/\.(jpeg|jpg|gif|png|webp)$/)) return 'image';
+    return 'document'; // fallback default
+  };
+
+  // Sidebar upload success handler — logs to console and triggers /ingest
+  const handleSidebarUploadSuccess = async (e: any) => {
     if (e && e.cdnUrl) {
       console.log(`📁 [Sidebar] File uploaded: ${e.name}`);
       console.log(`   CDN URL: ${e.cdnUrl}`);
       console.log(`   UUID: ${e.uuid}`);
+      
+      const payload = {
+        source_type: determineSourceType(e.name),
+        file_url: e.cdnUrl
+      };
+
+      try {
+        console.log(`🚀 Sending ingestion request to backend proxy:`, payload);
+        const res = await fetch(`/api/proxy/ingest`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          console.log(`✅ Backend successfully queued ingestion for ${e.name}`, data);
+          
+          if (data.job_id) {
+             const newJob = {
+                job_id: data.job_id,
+                document_id: data.document_id || "",
+                name: e.name,
+                type: determineSourceType(e.name),
+                size: (e.size ? (e.size / 1024).toFixed(1) + " KB" : "Unknown"),
+                uploadedAt: new Date().toISOString(),
+                status: data.status || "pending",
+                file_url: payload.file_url
+             };
+             const existing = JSON.parse(localStorage.getItem('axiom_ingestion_jobs') || '[]');
+             localStorage.setItem('axiom_ingestion_jobs', JSON.stringify([newJob, ...existing]));
+             window.dispatchEvent(new Event('axiom_jobs_updated'));
+          }
+        } else {
+          console.error(`❌ Ingestion API returned an error: ${res.status}`, await res.text());
+        }
+      } catch (err) {
+        console.error("❌ Failed to reach the /ingest API endpoint:", err);
+      }
     }
   };
 

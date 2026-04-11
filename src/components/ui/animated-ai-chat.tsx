@@ -120,8 +120,18 @@ export function AnimatedAIChat() {
         setShowUploader(true);
     };
 
+    // Helper to determine the source_type for the backend
+    const determineSourceType = (fileName: string) => {
+        const fn = fileName.toLowerCase();
+        if (fn.endsWith('.pdf')) return 'pdf';
+        if (fn.endsWith('.docx') || fn.endsWith('.doc')) return 'docx';
+        if (fn.endsWith('.csv')) return 'csv';
+        if (fn.match(/\.(jpeg|jpg|gif|png|webp)$/)) return 'image';
+        return 'document';
+    };
+
     // Called per individual file upload success
-    const handleFileUploadSuccess = (e: any) => {
+    const handleFileUploadSuccess = async (e: any) => {
         const entry = e;
         if (entry && entry.cdnUrl) {
             const newFile: UploadedFile = {
@@ -137,8 +147,45 @@ export function AnimatedAIChat() {
             // Log the CDN URL to console
             console.log(`✅ File uploaded successfully: ${newFile.name}`);
             console.log(`   CDN URL: ${newFile.cdnUrl}`);
-            console.log(`   UUID: ${newFile.uuid}`);
-            console.log(`   Size: ${(newFile.size / 1024).toFixed(1)} KB`);
+            
+            const payload = {
+                source_type: determineSourceType(newFile.name),
+                file_url: newFile.cdnUrl
+            };
+            
+            try {
+                console.log(`🚀 Sending ingestion request to backend proxy:`, payload);
+                const res = await fetch("/api/proxy/ingest", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log(`✅ Backend successfully queued ingestion for ${newFile.name}`, data);
+                    
+                    if (data.job_id) {
+                         const newJob = {
+                            job_id: data.job_id,
+                            document_id: data.document_id || "",
+                            name: newFile.name,
+                            type: determineSourceType(newFile.name),
+                            size: (newFile.size ? (newFile.size / 1024).toFixed(1) + " KB" : "Unknown"),
+                            uploadedAt: new Date().toISOString(),
+                            status: data.status || "pending",
+                            file_url: newFile.cdnUrl
+                         };
+                         const existing = JSON.parse(localStorage.getItem('axiom_ingestion_jobs') || '[]');
+                         localStorage.setItem('axiom_ingestion_jobs', JSON.stringify([newJob, ...existing]));
+                         window.dispatchEvent(new Event('axiom_jobs_updated'));
+                    }
+                } else {
+                    console.error(`❌ Ingestion API returned an error: ${res.status}`);
+                }
+            } catch (err) {
+                console.error("❌ Failed to reach the /ingest API endpoint:", err);
+            }
         }
     };
 

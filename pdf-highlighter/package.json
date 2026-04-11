@@ -1,0 +1,13 @@
+{
+  "name": "pdf-highlight-chunks",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Utility to highlight text chunks inside a PDF.",
+  "scripts": {
+    "start": "node highlightChunks.js"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.0.0"
+  }
+}
