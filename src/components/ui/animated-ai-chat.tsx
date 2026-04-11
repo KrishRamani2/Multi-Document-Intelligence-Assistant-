@@ -74,6 +74,8 @@ export function AnimatedAIChat() {
     const [isTyping, setIsTyping] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [showUploader, setShowUploader] = useState(false);
+    const [linkInput, setLinkInput] = useState("");
+    const [linkType, setLinkType] = useState<"youtube" | "html">("youtube");
     const [, startTransition] = useTransition();
 
     // Audio refs
@@ -187,6 +189,63 @@ export function AnimatedAIChat() {
                 console.error("❌ Failed to reach the /ingest API endpoint:", err);
             }
         }
+    };
+
+    const handleAddLink = async () => {
+        if (!linkInput.trim()) return;
+
+        const newFile: UploadedFile = {
+            name: linkInput,
+            cdnUrl: linkInput,
+            uuid: Math.random().toString(36).substring(2, 9),
+            size: 0,
+            isImage: false,
+            mimeType: "text/uri-list",
+        };
+        setUploadedFiles((prev) => [...prev, newFile]);
+
+        const sourceType = linkType === "youtube" ? "youtube" : "web pages";
+        
+        const payload = {
+            source_type: sourceType,
+            file_url: linkInput
+        };
+        
+        try {
+            console.log(`🚀 Sending ingestion request to backend proxy:`, payload);
+            const res = await fetch("/api/proxy/ingest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                console.log(`✅ Backend successfully queued ingestion for link`, data);
+                
+                if (data.job_id) {
+                     const newJob = {
+                        job_id: data.job_id,
+                        document_id: data.document_id || "",
+                        name: linkInput,
+                        type: sourceType,
+                        size: "Link",
+                        uploadedAt: new Date().toISOString(),
+                        status: data.status || "pending",
+                        file_url: linkInput
+                     };
+                     const existing = JSON.parse(localStorage.getItem('axiom_ingestion_jobs') || '[]');
+                     localStorage.setItem('axiom_ingestion_jobs', JSON.stringify([newJob, ...existing]));
+                     window.dispatchEvent(new Event('axiom_jobs_updated'));
+                }
+            } else {
+                console.error(`❌ Ingestion API returned an error: ${res.status}`);
+            }
+        } catch (err) {
+            console.error("❌ Failed to reach the /ingest API endpoint:", err);
+        }
+        
+        setLinkInput("");
     };
 
     // Called when user clicks "Done" in the uploader
@@ -495,6 +554,37 @@ export function AnimatedAIChat() {
                                     onFileUploadSuccess={handleFileUploadSuccess}
                                     onDoneClick={handleDoneClick}
                                 />
+                            </div>
+
+                            <div className="mt-6 flex flex-col gap-3 border-t border-[var(--border)] pt-4">
+                                <h3 className="text-sm font-medium text-[var(--foreground)]">Or add a link</h3>
+                                <div className="flex gap-2">
+                                    <select 
+                                        className="bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-md px-2 py-1.5 focus:outline-none focus:border-[var(--primary)]"
+                                        value={linkType}
+                                        onChange={(e) => setLinkType(e.target.value as "youtube" | "html")}
+                                    >
+                                        <option value="youtube">YouTube</option>
+                                        <option value="html">Web Page</option>
+                                    </select>
+                                    <input 
+                                        type="url" 
+                                        placeholder="Paste link here..."
+                                        className="flex-1 bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-md px-3 py-1.5 focus:outline-none focus:border-[var(--primary)] placeholder:text-[var(--muted)]"
+                                        value={linkInput}
+                                        onChange={(e) => setLinkInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleAddLink();
+                                        }}
+                                    />
+                                    <button 
+                                        onClick={handleAddLink}
+                                        disabled={!linkInput.trim()}
+                                        className="bg-[var(--primary)] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
                             </div>
 
                             {uploadedFiles.length > 0 && (

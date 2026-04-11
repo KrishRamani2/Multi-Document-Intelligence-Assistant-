@@ -32,6 +32,7 @@ import {
   ShieldCheckIcon,
   GitBranchIcon,
   ActivityIcon,
+  HighlighterIcon,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -140,10 +141,9 @@ const isTerminalStatus = (status: string) => {
 
 const normalizeStatus = (status: string): IngestionStatus => {
   const s = (status || "pending").toLowerCase();
-  if (s === "success") return "completed";
-  if (s === "completed") return "completed";
-  if (s === "failed") return "failed";
-  if (s === "processing") return "processing";
+  if (s === "success" || s === "completed" || s === "done" || s === "finished") return "completed";
+  if (s === "failed" || s === "error") return "failed";
+  if (s === "processing" || s === "running" || s === "in_progress") return "processing";
   return "pending";
 };
 
@@ -162,6 +162,8 @@ const getFileIcon = (type: string) => {
     case "image": return <FileImageIcon className="text-blue-500 w-5 h-5" />;
     case "docx": return <FileTextIcon className="text-blue-700 w-5 h-5" />;
     case "csv": return <FileArchiveIcon className="text-emerald-500 w-5 h-5" />;
+    case "youtube": return <ExternalLinkIcon className="text-red-500 w-5 h-5" />;
+    case "web pages": return <ExternalLinkIcon className="text-emerald-500 w-5 h-5" />;
     default: return <FileIcon className="text-[var(--muted)] w-5 h-5" />;
   }
 };
@@ -193,8 +195,23 @@ const getStageIcon = (index: number, status: IngestionStatus) => {
   return <Icon className="w-4 h-4 text-[var(--muted)]" />;
 };
 
-const buildPdfViewerUrl = (url: string): string => {
+const buildPreviewUrl = (url: string, fileType: string): string => {
   if (!url) return "";
+  if (fileType === "youtube") {
+      let videoId = "";
+      try {
+          const urlObj = new URL(url);
+          if (urlObj.hostname === "youtu.be") {
+              videoId = urlObj.pathname.slice(1);
+          } else {
+              videoId = urlObj.searchParams.get("v") || "";
+          }
+      } catch(e) {}
+      if (videoId) return `https://www.youtube.com/embed/${videoId}`;
+  }
+  if (fileType === "web pages") {
+      return url;
+  }
   if (!url.endsWith("/")) return url + "/";
   return url;
 };
@@ -254,7 +271,7 @@ function PdfPreviewModal({ open, onClose, url, fileName, fileType }: {
 }) {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeError, setIframeError] = useState(false);
-  const viewerUrl = buildPdfViewerUrl(url);
+  const viewerUrl = buildPreviewUrl(url, fileType);
 
   useEffect(() => {
     if (open) { setIframeLoaded(false); setIframeError(false); }
@@ -327,6 +344,8 @@ function PdfPreviewModal({ open, onClose, url, fileName, fileType }: {
                   title="Document Preview"
                   onLoad={() => setIframeLoaded(true)}
                   onError={() => setIframeError(true)}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
                   sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                 />
               )}
@@ -565,6 +584,12 @@ export function IngestionWikiViewer() {
   const [activeChunkTab, setActiveChunkTab] = useState<"sections" | "passages" | "sentences">("sections");
   const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Highlighted PDF state
+  const [highlightedPdfUrl, setHighlightedPdfUrl] = useState<string | null>(null);
+  const [isHighlighting, setIsHighlighting] = useState(false);
+  const [highlightStats, setHighlightStats] = useState<{ total_chunks: number; highlighted: number; missing: number; pages_processed: number } | null>(null);
+  const [highlightError, setHighlightError] = useState<string | null>(null);
 
   // ── Load jobs ────────────────────────────────────────────────────────────
   const loadJobs = useCallback(() => {
@@ -909,12 +934,140 @@ export function IngestionWikiViewer() {
               </button>
             )}
 
+            {/* View Highlighted PDF button — only if document is completed and has chunks */}
+            {renderJob.status === "completed" && currentDocData && renderJob.file_url && (renderJob.type === "pdf" || renderJob.type === "docx" || renderJob.type === "other") && (
+              <button
+                onClick={async () => {
+                  if (highlightedPdfUrl) {
+                    setPreviewUrl(highlightedPdfUrl);
+                    setShowDocPreview(true);
+                    return;
+                  }
+                  setIsHighlighting(true);
+                  setHighlightError(null);
+                  try {
+                    const allChunks = [
+                      ...(currentDocData.hierarchical_chunks?.sections || []).map((c: any) => ({ ...c, level: "section" })),
+                      ...(currentDocData.hierarchical_chunks?.passages || []).map((c: any) => ({ ...c, level: "passage" })),
+                      ...(currentDocData.hierarchical_chunks?.sentences || []).map((c: any) => ({ ...c, level: "sentence" })),
+                    ];
+                    const res = await fetch("/api/highlight-pdf", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ pdf_url: renderJob.file_url, chunks: allChunks }),
+                    });
+                    if (!res.ok) {
+                      const errData = await res.json().catch(() => ({}));
+                      throw new Error(errData.error || `HTTP ${res.status}`);
+                    }
+                    const statsHeader = res.headers.get("X-Highlight-Stats");
+                    if (statsHeader) {
+                      try { setHighlightStats(JSON.parse(statsHeader)); } catch {}
+                    }
+                    const blob = await res.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    setHighlightedPdfUrl(blobUrl);
+                    setPreviewUrl(blobUrl);
+                    setShowDocPreview(true);
+                  } catch (err: any) {
+                    console.error("Highlight failed:", err);
+                    setHighlightError(err.message || "Failed to highlight PDF");
+                  } finally {
+                    setIsHighlighting(false);
+                  }
+                }}
+                disabled={isHighlighting}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors",
+                  highlightedPdfUrl
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                    : "border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)] text-[var(--foreground)]",
+                  isHighlighting && "opacity-60 cursor-wait"
+                )}
+              >
+                {isHighlighting ? (
+                  <Loader2Icon className="w-4 h-4 animate-spin" />
+                ) : (
+                  <HighlighterIcon className="w-4 h-4" />
+                )}
+                {isHighlighting ? "Highlighting…" : highlightedPdfUrl ? "View Highlighted" : "Highlight Chunks"}
+              </button>
+            )}
+
             <div className={cn("px-3 py-1.5 rounded-full text-[13px] font-medium flex items-center gap-1.5 border", getStatusBadgeClass(renderJob.status))}>
               {getStatusIcon(renderJob.status)}
               <span className="capitalize">{renderJob.status}</span>
             </div>
           </div>
         </div>
+
+        {/* ── Highlight Error / Stats Banner ── */}
+        {highlightError && (
+          <div className="max-w-3xl mx-auto px-8 pt-4">
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 flex items-center gap-3">
+              <AlertCircleIcon className="w-5 h-5 text-red-400 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-400">Highlighting failed</p>
+                <p className="text-[12px] text-[var(--muted)] mt-0.5">{highlightError}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {highlightStats && (
+          <div className="max-w-3xl mx-auto px-8 pt-4">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <HighlighterIcon className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-semibold text-amber-400">Chunk Highlighting Results</h3>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { label: "Total Chunks", value: highlightStats.total_chunks, color: "text-[var(--foreground)]" },
+                  { label: "Highlighted", value: highlightStats.highlighted, color: "text-emerald-400" },
+                  { label: "Missing", value: highlightStats.missing, color: highlightStats.missing > 0 ? "text-red-400" : "text-[var(--muted)]" },
+                  { label: "Pages", value: highlightStats.pages_processed, color: "text-blue-400" },
+                ].map((stat) => (
+                  <div key={stat.label} className="text-center">
+                    <p className={cn("text-xl font-bold", stat.color)}>{stat.value}</p>
+                    <p className="text-[11px] text-[var(--muted)] mt-0.5">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Inline Highlighted PDF Viewer ── */}
+        {highlightedPdfUrl && (
+          <div className="max-w-3xl mx-auto px-8 pt-6">
+            <div className="rounded-xl border border-amber-500/20 overflow-hidden">
+              <div className="bg-amber-500/5 border-b border-amber-500/20 px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <HighlighterIcon className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-[var(--foreground)]">Highlighted Document</span>
+                  <span className="text-[11px] text-[var(--muted)]">— Chunks are highlighted in yellow</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a href={highlightedPdfUrl} download="highlighted_document.pdf"
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium rounded-md bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-active)] transition-colors">
+                    <DownloadIcon className="w-3.5 h-3.5" /> Download
+                  </a>
+                  <button onClick={() => { setPreviewUrl(highlightedPdfUrl); setShowDocPreview(true); }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                    <ExternalLinkIcon className="w-3.5 h-3.5" /> Fullscreen
+                  </button>
+                </div>
+              </div>
+              <iframe
+                src={highlightedPdfUrl}
+                className="w-full border-0"
+                style={{ height: "600px" }}
+                title="Highlighted PDF Preview"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Pipeline */}
         <div className="max-w-3xl mx-auto py-10 px-8">
