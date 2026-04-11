@@ -571,21 +571,28 @@ function TemporalMetadataCard({ temporal }: { temporal: TemporalMetadata }) {
   );
 }
 
-// ─── Chunk Explorer Card ────────────────────────────────────────────────────
+// ─── Connected Node Chunk Card ──────────────────────────────────────────────
 
-function ChunkExplorerCard({ chunk, index, variant }: {
+function ChunkExplorerCard({ chunk, index, variant, totalChunks, maxChar }: {
   chunk: any; index: number; variant: "hierarchical" | "recursive";
+  totalChunks: number; maxChar: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-
   const isHier = variant === "hierarchical";
-  const borderColor = isHier ? "border-blue-500/20" : "border-emerald-500/20";
-  const bgColor = isHier ? "bg-blue-500/5" : "bg-emerald-500/5";
-  const badgeColor = isHier ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400";
-  const accentColor = isHier ? "text-blue-400" : "text-emerald-400";
+  const isLast = index === totalChunks - 1;
+
+  const accentRgb = isHier ? "59,130,246" : "16,185,129"; // blue-500 / emerald-500
+  const dotColor = isHier ? "bg-blue-500" : "bg-emerald-500";
+  const lineColor = isHier ? "bg-blue-500/20" : "bg-emerald-500/20";
+  const borderGradient = isHier
+    ? "from-blue-500/30 via-blue-500/10 to-transparent"
+    : "from-emerald-500/30 via-emerald-500/10 to-transparent";
+  const badgeBg = isHier ? "bg-blue-500/12 text-blue-400 border-blue-500/25" : "bg-emerald-500/12 text-emerald-400 border-emerald-500/25";
 
   const charSpan = (chunk.end_char || 0) - (chunk.start_char || 0);
+  const startPct = maxChar > 0 ? ((chunk.start_char || 0) / maxChar) * 100 : 0;
+  const widthPct = maxChar > 0 ? Math.max((charSpan / maxChar) * 100, 1) : 100;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -596,95 +603,137 @@ function ChunkExplorerCard({ chunk, index, variant }: {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03 }}
-      className={cn("rounded-xl border p-0 overflow-hidden cursor-pointer hover:shadow-md transition-all", borderColor)}
-      onClick={() => setExpanded(!expanded)}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.05, type: "spring", stiffness: 200 }}
+      className="relative flex gap-0"
     >
-      {/* Card Header */}
-      <div className={cn("px-4 py-3.5 flex items-start justify-between gap-3", bgColor)}>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="text-[13px] font-semibold text-[var(--foreground)]">
-              #{index + 1}
-            </span>
-            <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full", badgeColor)}>
-              {chunk.level || variant}
-            </span>
-            <span className="text-[10px] font-mono text-[var(--muted)]">
-              chars {chunk.start_char}–{chunk.end_char}
-            </span>
-            {charSpan > 0 && (
-              <span className="text-[10px] text-[var(--muted)] opacity-60">
-                ({charSpan} chars)
-              </span>
-            )}
-          </div>
-          {chunk.heading_path && (
-            <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mb-1">
-              <BookOpenIcon className="w-3 h-3 shrink-0" />
-              <span className="truncate">{chunk.heading_path}</span>
-            </div>
-          )}
-          <p className={cn("text-[13px] leading-relaxed text-[var(--foreground)]", expanded ? "" : "line-clamp-2")}>
-            {chunk.text}
-          </p>
+      {/* ── Left: Timeline Node + Line ── */}
+      <div className="flex flex-col items-center w-12 shrink-0 pt-5 relative">
+        {/* Connecting line above */}
+        {index > 0 && <div className={cn("absolute top-0 w-0.5 h-5", lineColor)} />}
+        {/* Glowing node */}
+        <div className="relative z-10">
+          <div className={cn("w-4 h-4 rounded-full border-2 transition-all duration-300", dotColor,
+            expanded ? `shadow-[0_0_12px_rgba(${accentRgb},0.6)]` : `shadow-[0_0_6px_rgba(${accentRgb},0.3)]`
+          )} />
+          {/* Pulse ring on hover */}
+          <div className={cn("absolute inset-0 rounded-full animate-ping opacity-20", dotColor)} style={{ animationDuration: "3s" }} />
         </div>
-        <div className="flex items-center gap-2 shrink-0 pt-0.5">
-          <button
-            onClick={handleCopy}
-            className={cn(
-              "text-[11px] px-2 py-0.5 rounded-md border transition-colors",
-              copied
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                : "bg-[var(--surface-hover)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-            )}
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-          <ChevronDownIcon className={cn("w-4 h-4 text-[var(--muted)] transition-transform", expanded ? "rotate-180" : "")} />
-        </div>
+        {/* Connecting line below */}
+        {!isLast && <div className={cn("flex-1 w-0.5 min-h-[20px]", lineColor)} />}
       </div>
 
-      {/* Expanded Details */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 py-3 border-t border-[var(--border)] bg-[var(--surface-raised)] space-y-2">
-              {chunk.chunk_id && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-medium w-20 shrink-0">ID</span>
-                  <span className="text-[11px] font-mono text-[var(--foreground)] truncate">{chunk.chunk_id}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-medium w-20 shrink-0">Level</span>
-                <span className={cn("text-[11px] font-medium", accentColor)}>{chunk.level || variant}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-medium w-20 shrink-0">Span</span>
-                <span className="text-[11px] font-mono text-[var(--foreground)]">{chunk.start_char} → {chunk.end_char} ({charSpan} chars)</span>
-              </div>
-              {/* Character position bar */}
-              <div className="mt-2">
-                <div className="w-full h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
-                  <div
-                    className={cn("h-full rounded-full", isHier ? "bg-blue-500" : "bg-emerald-500")}
-                    style={{ width: "100%", opacity: 0.6 }}
-                  />
-                </div>
-              </div>
-            </div>
-          </motion.div>
+      {/* ── Right: Card ── */}
+      <div
+        className={cn(
+          "flex-1 mb-3 rounded-xl overflow-hidden cursor-pointer transition-all duration-200",
+          "border border-[var(--border)] hover:shadow-lg",
+          expanded && `shadow-[0_4px_24px_rgba(${accentRgb},0.08)]`
         )}
-      </AnimatePresence>
+        onClick={() => setExpanded(!expanded)}
+      >
+        {/* Gradient accent bar */}
+        <div className={cn("h-0.5 bg-gradient-to-r", borderGradient)} />
+
+        {/* Card content */}
+        <div className="px-4 py-3.5 bg-[var(--surface-raised)]">
+          {/* Top row: index, badge, char range */}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[14px] font-bold text-[var(--foreground)] tabular-nums">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className={cn("text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border", badgeBg)}>
+                {chunk.level || variant}
+              </span>
+              {chunk.heading_path && (
+                <span className="text-[10px] text-[var(--muted)] flex items-center gap-1 max-w-[200px]">
+                  <BookOpenIcon className="w-2.5 h-2.5 shrink-0 opacity-60" />
+                  <span className="truncate">{chunk.heading_path}</span>
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={handleCopy}
+                className={cn(
+                  "text-[10px] px-2 py-0.5 rounded-md border transition-all duration-200",
+                  copied
+                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 scale-105"
+                    : "bg-transparent border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--foreground)]/20"
+                )}
+              >
+                {copied ? "✓" : "Copy"}
+              </button>
+              <ChevronDownIcon className={cn("w-3.5 h-3.5 text-[var(--muted)] transition-transform duration-200", expanded ? "rotate-180" : "")} />
+            </div>
+          </div>
+
+          {/* Text preview */}
+          <p className={cn("text-[13px] leading-relaxed text-[var(--foreground)]/90", expanded ? "" : "line-clamp-2")}>
+            {chunk.text}
+          </p>
+
+          {/* Document position bar — shows where this chunk sits in the full document */}
+          <div className="mt-3 relative">
+            <div className="flex items-center justify-between text-[9px] text-[var(--muted)] mb-1 font-mono">
+              <span>{chunk.start_char}</span>
+              <span className="opacity-50">{charSpan} chars</span>
+              <span>{chunk.end_char}</span>
+            </div>
+            <div className="w-full h-1.5 bg-[var(--border)] rounded-full overflow-hidden relative">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${widthPct}%` }}
+                transition={{ delay: index * 0.05 + 0.2, duration: 0.5, ease: "easeOut" }}
+                className={cn("absolute h-full rounded-full", isHier ? "bg-blue-500" : "bg-emerald-500")}
+                style={{ left: `${startPct}%`, opacity: 0.7 }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded metadata panel */}
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 py-3 border-t border-[var(--border)] bg-[#0d0d0f]">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {chunk.chunk_id && (
+                    <div className="col-span-2">
+                      <span className="text-[9px] text-[var(--muted)] uppercase tracking-wider font-semibold">Chunk ID</span>
+                      <p className="text-[11px] font-mono text-[var(--foreground)] mt-0.5 break-all opacity-80">{chunk.chunk_id}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-[9px] text-[var(--muted)] uppercase tracking-wider font-semibold">Level</span>
+                    <p className={cn("text-[11px] font-semibold mt-0.5", isHier ? "text-blue-400" : "text-emerald-400")}>{chunk.level || variant}</p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-[var(--muted)] uppercase tracking-wider font-semibold">Character Range</span>
+                    <p className="text-[11px] font-mono text-[var(--foreground)] mt-0.5">{chunk.start_char} → {chunk.end_char}</p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-[var(--muted)] uppercase tracking-wider font-semibold">Span Length</span>
+                    <p className="text-[11px] font-mono text-[var(--foreground)] mt-0.5">{charSpan} characters</p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-[var(--muted)] uppercase tracking-wider font-semibold">Position</span>
+                    <p className="text-[11px] font-mono text-[var(--foreground)] mt-0.5">{Math.round(startPct)}% into document</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 }
@@ -1389,123 +1438,212 @@ export function IngestionWikiViewer() {
         )}
 
         {/* ═══════════════ CHUNK EXPLORER VIEW ═══════════════ */}
-        {mainViewTab === "chunks" && (
-          <div className="max-w-4xl mx-auto py-8 px-8 pb-16">
-            {renderJob.status !== "completed" ? (
-              <div className="text-center py-20 text-[var(--muted)]">
-                <NetworkIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
-                <p className="text-sm font-medium">Waiting for ingestion to complete</p>
-                <p className="text-[12px] opacity-60 mt-1">Chunk data will be available once processing finishes.</p>
-              </div>
-            ) : chunkExplorerLoading ? (
-              <div className="text-center py-20">
-                <Loader2Icon className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
-                <p className="text-sm text-[var(--muted)]">Fetching chunk data from API…</p>
-              </div>
-            ) : (
-              <>
-                {/* Search Bar */}
-                <div className="mb-6">
-                  <div className="relative">
-                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted)]" />
-                    <input
-                      type="text"
-                      placeholder="Search chunks by text, heading, or ID…"
-                      value={chunkSearchQuery}
-                      onChange={(e) => setChunkSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-raised)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-xl focus:outline-none focus:border-[var(--primary)] placeholder:text-[var(--muted)] transition-colors"
-                    />
-                  </div>
-                </div>
+        {mainViewTab === "chunks" && (() => {
+          // Compute maxChar for document position visualization
+          const allChunksForMap = [...apiHierarchicalChunks, ...apiRecursiveChunks];
+          const maxCharValue = Math.max(...allChunksForMap.map((c: any) => c.end_char || 0), 1);
+          const hierMaxChar = Math.max(...apiHierarchicalChunks.map((c: any) => c.end_char || 0), 1);
+          const recMaxChar = Math.max(...apiRecursiveChunks.map((c: any) => c.end_char || 0), 1);
 
-                {/* Stats Row */}
-                <div className="grid grid-cols-2 gap-4 mb-8">
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                        <SplitIcon className="w-5 h-5 text-blue-400" />
+          const filteredHier = chunkSearchQuery
+            ? apiHierarchicalChunks.filter((c: any) =>
+                c.text?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
+                c.heading_path?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
+                c.chunk_id?.toLowerCase().includes(chunkSearchQuery.toLowerCase())
+              )
+            : apiHierarchicalChunks;
+
+          const filteredRec = chunkSearchQuery
+            ? apiRecursiveChunks.filter((c: any) =>
+                c.text?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
+                c.chunk_id?.toLowerCase().includes(chunkSearchQuery.toLowerCase())
+              )
+            : apiRecursiveChunks;
+
+          return (
+            <div className="max-w-4xl mx-auto py-8 px-8 pb-16">
+              {renderJob.status !== "completed" ? (
+                <div className="text-center py-20 text-[var(--muted)]">
+                  <NetworkIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
+                  <p className="text-sm font-medium">Waiting for ingestion to complete</p>
+                  <p className="text-[12px] opacity-60 mt-1">Chunk data will be available once processing finishes.</p>
+                </div>
+              ) : chunkExplorerLoading ? (
+                <div className="text-center py-20">
+                  <Loader2Icon className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
+                  <p className="text-sm text-[var(--muted)]">Fetching chunk data from API…</p>
+                </div>
+              ) : (
+                <>
+                  {/* Search Bar */}
+                  <div className="mb-6">
+                    <div className="relative">
+                      <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted)]" />
+                      <input
+                        type="text"
+                        placeholder="Search chunks by text, heading, or ID…"
+                        value={chunkSearchQuery}
+                        onChange={(e) => setChunkSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-raised)] border border-[var(--border)] text-[var(--foreground)] text-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500/40 focus:border-blue-500/40 placeholder:text-[var(--muted)] transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Document Coverage Map ── */}
+                  <div className="mb-8 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5 overflow-hidden">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <NetworkIcon className="w-4 h-4 text-[var(--muted)]" />
+                        <h3 className="text-sm font-semibold text-[var(--foreground)]">Document Coverage Map</h3>
+                      </div>
+                      <span className="text-[11px] font-mono text-[var(--muted)]">{maxCharValue.toLocaleString()} total chars</span>
+                    </div>
+                    {/* Coverage bar */}
+                    <div className="relative w-full h-8 bg-[#111113] rounded-lg overflow-hidden border border-[var(--border)]">
+                      {/* Hierarchical chunk positions */}
+                      {apiHierarchicalChunks.map((c: any, i: number) => {
+                        const left = ((c.start_char || 0) / maxCharValue) * 100;
+                        const width = Math.max(((c.end_char - c.start_char) / maxCharValue) * 100, 0.5);
+                        return (
+                          <motion.div
+                            key={`h-${i}`}
+                            initial={{ opacity: 0, scaleX: 0 }}
+                            animate={{ opacity: 1, scaleX: 1 }}
+                            transition={{ delay: i * 0.05 + 0.1, duration: 0.3 }}
+                            className="absolute top-0 h-[45%] rounded-sm bg-blue-500"
+                            style={{ left: `${left}%`, width: `${width}%`, opacity: 0.6 }}
+                            title={`Hierarchical #${i + 1}: ${c.start_char}–${c.end_char}`}
+                          />
+                        );
+                      })}
+                      {/* Recursive chunk positions */}
+                      {apiRecursiveChunks.map((c: any, i: number) => {
+                        const left = ((c.start_char || 0) / maxCharValue) * 100;
+                        const width = Math.max(((c.end_char - c.start_char) / maxCharValue) * 100, 0.5);
+                        return (
+                          <motion.div
+                            key={`r-${i}`}
+                            initial={{ opacity: 0, scaleX: 0 }}
+                            animate={{ opacity: 1, scaleX: 1 }}
+                            transition={{ delay: i * 0.05 + 0.3, duration: 0.3 }}
+                            className="absolute bottom-0 h-[45%] rounded-sm bg-emerald-500"
+                            style={{ left: `${left}%`, width: `${width}%`, opacity: 0.6 }}
+                            title={`Recursive #${i + 1}: ${c.start_char}–${c.end_char}`}
+                          />
+                        );
+                      })}
+                      {/* Center divider */}
+                      <div className="absolute top-[45%] left-0 right-0 h-[10%] bg-[var(--border)] opacity-30" />
+                    </div>
+                    {/* Legend */}
+                    <div className="flex items-center gap-6 mt-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-2 rounded-sm bg-blue-500 opacity-60" />
+                        <span className="text-[10px] text-[var(--muted)]">Hierarchical ({apiHierarchicalChunks.length})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-2 rounded-sm bg-emerald-500 opacity-60" />
+                        <span className="text-[10px] text-[var(--muted)]">Recursive ({apiRecursiveChunks.length})</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats Row */}
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-center">
+                      <SplitIcon className="w-5 h-5 text-blue-400 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-blue-400">{apiHierarchicalChunks.length}</p>
+                      <p className="text-[10px] text-[var(--muted)] mt-0.5">Hierarchical</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-center">
+                      <BoxIcon className="w-5 h-5 text-emerald-400 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-emerald-400">{apiRecursiveChunks.length}</p>
+                      <p className="text-[10px] text-[var(--muted)] mt-0.5">Recursive</p>
+                    </div>
+                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 text-center">
+                      <FileTextIcon className="w-5 h-5 text-violet-400 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-violet-400">{maxCharValue.toLocaleString()}</p>
+                      <p className="text-[10px] text-[var(--muted)] mt-0.5">Total Characters</p>
+                    </div>
+                  </div>
+
+                  {/* ── Hierarchical Chunks — Connected Timeline ── */}
+                  <div className="mb-10">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
+                        <SplitIcon className="w-4 h-4 text-blue-400" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-[var(--foreground)]">Hierarchical Chunks</h3>
-                        <p className="text-[11px] text-[var(--muted)]">Passages extracted from document structure</p>
+                        <h2 className="text-[15px] font-semibold text-[var(--foreground)]">Hierarchical Passages</h2>
+                        <p className="text-[11px] text-[var(--muted)]">Document structure → semantic passages</p>
                       </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-blue-400">{apiHierarchicalChunks.length}</span>
-                      <span className="text-[12px] text-[var(--muted)]">chunks</span>
+                    <div className="pl-0">
+                      {filteredHier.map((chunk: any, idx: number) => (
+                        <ChunkExplorerCard
+                          key={chunk.chunk_id || idx}
+                          chunk={chunk}
+                          index={idx}
+                          variant="hierarchical"
+                          totalChunks={filteredHier.length}
+                          maxChar={hierMaxChar}
+                        />
+                      ))}
+                      {apiHierarchicalChunks.length === 0 && (
+                        <div className="text-center py-10 text-[var(--muted)]">
+                          <SplitIcon className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                          <p className="text-sm">No hierarchical chunks available.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                        <BoxIcon className="w-5 h-5 text-emerald-400" />
+
+                  {/* ── Visual Separator ── */}
+                  <div className="flex items-center gap-4 my-8">
+                    <div className="flex-1 h-px bg-gradient-to-r from-blue-500/30 to-transparent" />
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--surface-raised)] border border-[var(--border)] rounded-full">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-[10px] text-[var(--muted)] font-medium">→</span>
+                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    </div>
+                    <div className="flex-1 h-px bg-gradient-to-l from-emerald-500/30 to-transparent" />
+                  </div>
+
+                  {/* ── Recursive Chunks — Connected Timeline ── */}
+                  <div>
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                        <BoxIcon className="w-4 h-4 text-emerald-400" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-[var(--foreground)]">Recursive Chunks</h3>
-                        <p className="text-[11px] text-[var(--muted)]">Full document merged into recursive blocks</p>
+                        <h2 className="text-[15px] font-semibold text-[var(--foreground)]">Recursive Blocks</h2>
+                        <p className="text-[11px] text-[var(--muted)]">Full document merged into contiguous blocks</p>
                       </div>
                     </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-emerald-400">{apiRecursiveChunks.length}</span>
-                      <span className="text-[12px] text-[var(--muted)]">chunks</span>
+                    <div className="pl-0">
+                      {filteredRec.map((chunk: any, idx: number) => (
+                        <ChunkExplorerCard
+                          key={chunk.chunk_id || idx}
+                          chunk={chunk}
+                          index={idx}
+                          variant="recursive"
+                          totalChunks={filteredRec.length}
+                          maxChar={recMaxChar}
+                        />
+                      ))}
+                      {apiRecursiveChunks.length === 0 && (
+                        <div className="text-center py-10 text-[var(--muted)]">
+                          <BoxIcon className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                          <p className="text-sm">No recursive chunks available.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-
-                {/* ── Hierarchical Chunks Section ── */}
-                <div className="mb-10">
-                  <div className="flex items-center gap-2.5 mb-4">
-                    <div className="w-1 h-6 rounded-full bg-blue-500" />
-                    <h2 className="text-base font-semibold text-[var(--foreground)]">Hierarchical Passages</h2>
-                  </div>
-                  <div className="space-y-3">
-                    {(chunkSearchQuery
-                      ? apiHierarchicalChunks.filter((c: any) =>
-                          c.text?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
-                          c.heading_path?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
-                          c.chunk_id?.toLowerCase().includes(chunkSearchQuery.toLowerCase())
-                        )
-                      : apiHierarchicalChunks
-                    ).map((chunk: any, idx: number) => (
-                      <ChunkExplorerCard key={chunk.chunk_id || idx} chunk={chunk} index={idx} variant="hierarchical" />
-                    ))}
-                    {apiHierarchicalChunks.length === 0 && (
-                      <div className="text-center py-10 text-[var(--muted)]">
-                        <SplitIcon className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                        <p className="text-sm">No hierarchical chunks available.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Recursive Chunks Section ── */}
-                <div>
-                  <div className="flex items-center gap-2.5 mb-4">
-                    <div className="w-1 h-6 rounded-full bg-emerald-500" />
-                    <h2 className="text-base font-semibold text-[var(--foreground)]">Recursive Blocks</h2>
-                  </div>
-                  <div className="space-y-3">
-                    {(chunkSearchQuery
-                      ? apiRecursiveChunks.filter((c: any) =>
-                          c.text?.toLowerCase().includes(chunkSearchQuery.toLowerCase()) ||
-                          c.chunk_id?.toLowerCase().includes(chunkSearchQuery.toLowerCase())
-                        )
-                      : apiRecursiveChunks
-                    ).map((chunk: any, idx: number) => (
-                      <ChunkExplorerCard key={chunk.chunk_id || idx} chunk={chunk} index={idx} variant="recursive" />
-                    ))}
-                    {apiRecursiveChunks.length === 0 && (
-                      <div className="text-center py-10 text-[var(--muted)]">
-                        <BoxIcon className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                        <p className="text-sm">No recursive chunks available.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
