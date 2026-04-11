@@ -33,7 +33,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   const navItems = [
     { name: "New Chat", icon: MessageSquarePlusIcon, href: "/chat" },
-    { name: "Ingestion Wiki", icon: BookOpenIcon, href: "#" },
+    { name: "Ingestion Wiki", icon: BookOpenIcon, href: "/chat/ingestion-wiki" },
     { name: "Knowledge Graph", icon: NetworkIcon, href: "/chat/knowledge-graph" },
     { name: "Data Sources", icon: DatabaseIcon, href: "#" },
   ];
