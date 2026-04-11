@@ -16,7 +16,8 @@ import {
   SearchIcon,
   BellIcon,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -28,12 +29,13 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showSidebarUploader, setShowSidebarUploader] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   const navItems = [
-    { name: "New Chat", icon: MessageSquarePlusIcon, active: true },
-    { name: "Ingestion Wiki", icon: BookOpenIcon },
-    { name: "Knowledge Graph", icon: NetworkIcon },
-    { name: "Data Sources", icon: DatabaseIcon },
+    { name: "New Chat", icon: MessageSquarePlusIcon, href: "/chat" },
+    { name: "Ingestion Wiki", icon: BookOpenIcon, href: "#" },
+    { name: "Knowledge Graph", icon: NetworkIcon, href: "/chat/knowledge-graph" },
+    { name: "Data Sources", icon: DatabaseIcon, href: "#" },
   ];
 
   const pastChats = [
@@ -81,28 +83,31 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       {/* Nav */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-2 py-2">
         <nav className="space-y-px">
-          {navItems.map((item, idx) => (
-            <a
-              key={idx}
-              href="#"
-              className={cn(
-                "flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-colors",
-                item.active
-                  ? "bg-[var(--surface-hover)] text-[var(--foreground)]"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]",
-                isSidebarCollapsed && !isMobileSidebarOpen ? "md:justify-center md:px-0" : ""
-              )}
-              title={item.name}
-            >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
-              <span className={cn(
-                "truncate",
-                isSidebarCollapsed && !isMobileSidebarOpen ? "md:hidden" : ""
-              )}>
-                {item.name}
-              </span>
-            </a>
-          ))}
+          {navItems.map((item, idx) => {
+            const isActive = item.href !== "#" && pathname === item.href;
+            return (
+              <Link
+                key={idx}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-colors",
+                  isActive
+                    ? "bg-[var(--surface-hover)] text-[var(--foreground)]"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]",
+                  isSidebarCollapsed && !isMobileSidebarOpen ? "md:justify-center md:px-0" : ""
+                )}
+                title={item.name}
+              >
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <span className={cn(
+                  "truncate",
+                  isSidebarCollapsed && !isMobileSidebarOpen ? "md:hidden" : ""
+                )}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
 
           {/* Upload Files nav item */}
           <button
