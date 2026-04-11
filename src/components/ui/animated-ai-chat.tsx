@@ -4,18 +4,13 @@ import { useEffect, useRef, useCallback, useTransition } from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
-    ImageIcon,
     FileUp,
-    LayoutTemplate,
-    MonitorIcon,
     Paperclip,
-    SendIcon,
     XIcon,
     LoaderIcon,
-    Sparkles,
-    Command,
     Mic,
     ArrowUpIcon,
+    Square
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as React from "react";
@@ -60,115 +55,35 @@ function useAutoResizeTextarea({ minHeight, maxHeight }: UseAutoResizeTextareaPr
     return { textareaRef, adjustHeight };
 }
 
-interface CommandSuggestion {
-    icon: React.ReactNode;
-    label: string;
-    description: string;
-    prefix: string;
-}
-
 export function AnimatedAIChat() {
     const [value, setValue] = useState("");
     const [attachments, setAttachments] = useState<string[]>([]);
     const [isTyping, setIsTyping] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
     const [, startTransition] = useTransition();
-    const [activeSuggestion, setActiveSuggestion] = useState<number>(-1);
-    const [showCommandPalette, setShowCommandPalette] = useState(false);
-    const [recentCommand, setRecentCommand] = useState<string | null>(null);
+    
+    // AutoResize
     const { textareaRef, adjustHeight } = useAutoResizeTextarea({
         minHeight: 44,
         maxHeight: 200,
     });
     const [inputFocused, setInputFocused] = useState(false);
-    const commandPaletteRef = useRef<HTMLDivElement>(null);
-
-    const commandSuggestions: CommandSuggestion[] = [
-        {
-            icon: <ImageIcon className="w-4 h-4" />,
-            label: "Clone UI",
-            description: "Generate UI from screenshot",
-            prefix: "/clone",
-        },
-        {
-            icon: <LayoutTemplate className="w-4 h-4" />,
-            label: "Import Figma",
-            description: "Import a design from Figma",
-            prefix: "/figma",
-        },
-        {
-            icon: <MonitorIcon className="w-4 h-4" />,
-            label: "Create Page",
-            description: "Generate a new web page",
-            prefix: "/page",
-        },
-        {
-            icon: <Sparkles className="w-4 h-4" />,
-            label: "Improve",
-            description: "Improve existing UI",
-            prefix: "/improve",
-        },
-    ];
-
-    useEffect(() => {
-        if (value.startsWith("/") && !value.includes(" ")) {
-            setShowCommandPalette(true);
-            const idx = commandSuggestions.findIndex((cmd) => cmd.prefix.startsWith(value));
-            setActiveSuggestion(idx >= 0 ? idx : -1);
-        } else {
-            setShowCommandPalette(false);
-        }
-    }, [value]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as Node;
-            const commandButton = document.querySelector("[data-command-button]");
-            if (
-                commandPaletteRef.current &&
-                !commandPaletteRef.current.contains(target) &&
-                !commandButton?.contains(target)
-            ) {
-                setShowCommandPalette(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (showCommandPalette) {
-            if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setActiveSuggestion((prev) =>
-                    prev < commandSuggestions.length - 1 ? prev + 1 : 0
-                );
-            } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setActiveSuggestion((prev) =>
-                    prev > 0 ? prev - 1 : commandSuggestions.length - 1
-                );
-            } else if (e.key === "Tab" || e.key === "Enter") {
-                e.preventDefault();
-                if (activeSuggestion >= 0) {
-                    selectCommandSuggestion(activeSuggestion);
-                }
-            } else if (e.key === "Escape") {
-                e.preventDefault();
-                setShowCommandPalette(false);
-            }
-        } else if (e.key === "Enter" && !e.shiftKey) {
+        if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             if (value.trim()) handleSendMessage();
         }
     };
 
     const handleSendMessage = () => {
-        if (value.trim()) {
+        if (value.trim() || attachments.length > 0) {
             startTransition(() => {
                 setIsTyping(true);
                 setTimeout(() => {
                     setIsTyping(false);
                     setValue("");
+                    setAttachments([]);
                     adjustHeight(true);
                 }, 3000);
             });
@@ -180,16 +95,28 @@ export function AnimatedAIChat() {
         setAttachments((prev) => [...prev, mockFileName]);
     };
 
-    const removeAttachment = (index: number) => {
-        setAttachments((prev) => prev.filter((_, i) => i !== index));
+    const handleToggleAudio = () => {
+        if (isRecording) {
+            setIsRecording(false);
+            setAttachments((prev) => [...prev, `audio-message-${Math.floor(Math.random() * 1000)}.mp3`]);
+        } else {
+            setIsRecording(true);
+            
+            // Auto stop recording after 5 seconds for demonstration purposes
+            setTimeout(() => {
+                setIsRecording(current => {
+                    if (current) {
+                        setAttachments((prev) => [...prev, `audio-message-${Math.floor(Math.random() * 1000)}.mp3`]);
+                        return false;
+                    }
+                    return current;
+                });
+            }, 5000);
+        }
     };
 
-    const selectCommandSuggestion = (index: number) => {
-        const cmd = commandSuggestions[index];
-        setValue(cmd.prefix + " ");
-        setShowCommandPalette(false);
-        setRecentCommand(cmd.label);
-        setTimeout(() => setRecentCommand(null), 2000);
+    const removeAttachment = (index: number) => {
+        setAttachments((prev) => prev.filter((_, i) => i !== index));
     };
 
     const getGreeting = () => {
@@ -214,44 +141,6 @@ export function AnimatedAIChat() {
 
                 {/* Input Card */}
                 <div className="relative">
-                    {/* Command Palette */}
-                    <AnimatePresence>
-                        {showCommandPalette && (
-                            <motion.div
-                                ref={commandPaletteRef}
-                                className="absolute left-0 right-0 bottom-full mb-1.5 rounded-xl z-50 overflow-hidden bg-[var(--surface-raised)] border border-[var(--border)] shadow-[var(--shadow-lg)]"
-                                initial={{ opacity: 0, y: 4 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 4 }}
-                                transition={{ duration: 0.12 }}
-                            >
-                                <div className="p-1">
-                                    {commandSuggestions.map((suggestion, index) => (
-                                        <button
-                                            key={suggestion.prefix}
-                                            className={cn(
-                                                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-left transition-colors",
-                                                activeSuggestion === index
-                                                    ? "bg-[var(--surface-hover)] text-[var(--foreground)]"
-                                                    : "text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
-                                            )}
-                                            onClick={() => selectCommandSuggestion(index)}
-                                        >
-                                            <span className="flex-shrink-0">{suggestion.icon}</span>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-[13px] font-medium">{suggestion.label}</div>
-                                                <div className="text-[11px] text-[var(--muted)] truncate">{suggestion.description}</div>
-                                            </div>
-                                            <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--badge-bg)] text-[var(--badge-fg)] font-mono flex-shrink-0">
-                                                {suggestion.prefix}
-                                            </kbd>
-                                        </button>
-                                    ))}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
                     <div
                         className={cn(
                             "rounded-xl border transition-colors",
@@ -306,6 +195,23 @@ export function AnimatedAIChat() {
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                        
+                        {/* Recording Indicator */}
+                        <AnimatePresence>
+                            {isRecording && (
+                                <motion.div
+                                    className="px-4 pb-2"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                >
+                                    <div className="flex items-center gap-2 text-sm text-red-500 font-medium">
+                                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                        Recording audio...
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Actions */}
                         <div className="px-3 py-2 flex items-center justify-between">
@@ -318,43 +224,35 @@ export function AnimatedAIChat() {
                                 >
                                     <Paperclip className="w-4 h-4" />
                                 </button>
+                                
                                 <button
                                     type="button"
-                                    data-command-button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowCommandPalette((prev) => !prev);
-                                    }}
+                                    onClick={handleToggleAudio}
                                     className={cn(
-                                        "inline-flex items-center justify-center w-8 h-8 rounded-lg text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors",
-                                        showCommandPalette && "bg-[var(--surface-hover)] text-[var(--foreground)]"
+                                        "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                                        isRecording 
+                                            ? "text-red-500 bg-red-500/10 hover:bg-red-500/20" 
+                                            : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
                                     )}
-                                    title="Commands"
+                                    title={isRecording ? "Stop recording" : "Record audio"}
                                 >
-                                    <Command className="w-4 h-4" />
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
-                                    title="Voice input"
-                                >
-                                    <Mic className="w-4 h-4" />
+                                    {isRecording ? <Square className="w-4 h-4" fill="currentColor" /> : <Mic className="w-4 h-4" />}
                                 </button>
                             </div>
 
                             <button
                                 type="button"
                                 onClick={handleSendMessage}
-                                disabled={isTyping || !value.trim()}
+                                disabled={isTyping || (!value.trim() && attachments.length === 0)}
                                 className={cn(
-                                    "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-                                    value.trim()
-                                        ? "bg-[var(--primary)] text-[var(--primary-fg)] hover:opacity-90"
-                                        : "text-[var(--muted)] cursor-not-allowed"
+                                    "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors border",
+                                    value.trim() || attachments.length > 0
+                                        ? "bg-[var(--primary)] text-[var(--primary-fg)] border-[var(--primary)] hover:opacity-90"
+                                        : "bg-transparent text-[var(--muted)] border-transparent cursor-not-allowed"
                                 )}
                             >
                                 {isTyping ? (
-                                    <LoaderIcon className="w-4 h-4 animate-spin" />
+                                    <LoaderIcon className="w-4 h-4 animate-spin text-[var(--muted)]" />
                                 ) : (
                                     <ArrowUpIcon className="w-4 h-4" />
                                 )}
@@ -362,29 +260,6 @@ export function AnimatedAIChat() {
                         </div>
                     </div>
                 </div>
-
-                {/* Suggestions */}
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                    {commandSuggestions.map((suggestion, index) => (
-                        <button
-                            key={suggestion.prefix}
-                            onClick={() => selectCommandSuggestion(index)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] hover:border-[var(--border-hover)] transition-colors"
-                        >
-                            {suggestion.icon}
-                            <span>{suggestion.label}</span>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Footer hint */}
-                <p className="text-center text-[11px] text-[var(--muted)]">
-                    Press{" "}
-                    <kbd className="px-1 py-0.5 rounded bg-[var(--badge-bg)] text-[var(--badge-fg)] font-mono text-[10px]">/</kbd>
-                    {" "}for commands ·{" "}
-                    <kbd className="px-1 py-0.5 rounded bg-[var(--badge-bg)] text-[var(--badge-fg)] font-mono text-[10px]">↵</kbd>
-                    {" "}to send
-                </p>
             </div>
 
             {/* Typing indicator */}

@@ -16,6 +16,7 @@ import {
   SearchIcon,
   BellIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -23,6 +24,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const router = useRouter();
 
   const navItems = [
     { name: "New Chat", icon: MessageSquarePlusIcon, active: true },
@@ -142,7 +144,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
               <p className="text-[13px] font-medium truncate">Admin</p>
               <p className="text-[11px] text-[var(--muted)] truncate">admin@axiom.io</p>
             </div>
-            <button className="p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] transition-colors" title="Sign out">
+            <button onClick={() => router.push("/")} className="p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] transition-colors" title="Sign out">
               <LogOutIcon className="w-3.5 h-3.5" />
             </button>
           </div>
