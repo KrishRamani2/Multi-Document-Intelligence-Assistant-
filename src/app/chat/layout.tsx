@@ -6,7 +6,6 @@ import {
   PanelLeftCloseIcon,
   XIcon,
   MessageSquarePlusIcon,
-  UploadCloudIcon,
   BookOpenIcon,
   NetworkIcon,
   DatabaseIcon,
@@ -20,6 +19,8 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { FileUploaderRegular } from "@uploadcare/react-uploader/next";
+import "@uploadcare/react-uploader/core.css";
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -28,7 +29,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   const navItems = [
     { name: "New Chat", icon: MessageSquarePlusIcon, active: true },
-    { name: "Upload Files", icon: UploadCloudIcon },
     { name: "Ingestion Wiki", icon: BookOpenIcon },
     { name: "Knowledge Graph", icon: NetworkIcon },
     { name: "Data Sources", icon: DatabaseIcon },
@@ -87,6 +87,26 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
               </span>
             </a>
           ))}
+
+          {/* Uploadcare File Uploader */}
+          <div
+            className={cn(
+              "px-2.5 pt-2",
+              isSidebarCollapsed && !isMobileSidebarOpen ? "md:px-0 md:flex md:justify-center overflow-hidden" : ""
+            )}
+          >
+            <div className={cn(
+              isSidebarCollapsed && !isMobileSidebarOpen ? "md:w-8 md:h-8 md:overflow-hidden md:relative" : "w-full"
+            )}>
+              <FileUploaderRegular
+                sourceList="local, camera, facebook, gdrive"
+                classNameUploader="uc-light uc-purple"
+                pubkey="f25db25b9fb13ce659fe"
+                cdnCname="https://5kcn84nzfr.ucarecd.net/"
+                filesViewMode="grid"
+              />
+            </div>
+          </div>
         </nav>
 
         {/* History */}

@@ -60,6 +60,7 @@ export function AnimatedAIChat() {
     const [attachments, setAttachments] = useState<string[]>([]);
     const [isTyping, setIsTyping] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [, startTransition] = useTransition();
     
     // Audio refs
@@ -95,8 +96,36 @@ export function AnimatedAIChat() {
     };
 
     const handleAttachFile = () => {
-        const mockFileName = `document-${Math.floor(Math.random() * 1000)}.pdf`;
-        setAttachments((prev) => [...prev, mockFileName]);
+        setIsUploadModalOpen(true);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        let newAttachments: string[] = [];
+
+        for (const file of files) {
+            if (file.name.endsWith('.zip') || file.type === 'application/zip') {
+                try {
+                    const JSZip = (await import('jszip')).default;
+                    const zip = new JSZip();
+                    const extracted = await zip.loadAsync(file);
+                    
+                    const extractedFiles = Object.keys(extracted.files).filter(filename => !extracted.files[filename].dir);
+                    newAttachments = [...newAttachments, ...extractedFiles];
+                } catch (error) {
+                    console.error("Error extracting zip:", error);
+                    alert("Failed to extract ZIP file.");
+                }
+            } else {
+                newAttachments.push(file.name);
+            }
+        }
+
+        setAttachments((prev) => [...prev, ...newAttachments]);
+        setIsUploadModalOpen(false);
+        e.target.value = '';
     };
 
     const startRecording = async () => {
@@ -323,6 +352,63 @@ export function AnimatedAIChat() {
                             <LoaderIcon className="w-3.5 h-3.5 animate-spin" />
                             <span>Axiom is thinking...</span>
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Upload Modal */}
+            <AnimatePresence>
+                {isUploadModalOpen && (
+                    <motion.div
+                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsUploadModalOpen(false)}
+                    >
+                        <motion.div
+                            className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-2xl w-full max-w-md p-6 shadow-2xl"
+                            initial={{ scale: 0.95, opacity: 0, y: 15 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 15 }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between mb-5">
+                                <h2 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">Upload Files</h2>
+                                <button
+                                    onClick={() => setIsUploadModalOpen(false)}
+                                    className="p-1.5 rounded-full text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-all"
+                                >
+                                    <XIcon className="w-5 h-5" />
+                                </button>
+                            </div>
+                            
+                            <div 
+                                className="group relative border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center hover:bg-[var(--surface-hover)] hover:border-[var(--primary)] transition-all duration-200 cursor-pointer"
+                                onClick={() => document.getElementById('file-upload')?.click()}
+                            >
+                                <div className="absolute inset-0 bg-[var(--primary)]/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="relative z-10 flex flex-col items-center gap-3">
+                                    <div className="p-3 bg-[var(--surface)] rounded-full shadow-sm border border-[var(--border)] group-hover:scale-110 transition-transform duration-200">
+                                        <FileUp className="w-8 h-8 text-[var(--primary)]" />
+                                    </div>
+                                    <div>
+                                        <p className="text-base font-semibold text-[var(--foreground)] mb-1">Click to browse files</p>
+                                        <p className="text-sm text-[var(--muted-foreground)]">
+                                            PDF, Images, MP3, and ZIP (automatically extracted)
+                                        </p>
+                                    </div>
+                                </div>
+                                <input
+                                    id="file-upload"
+                                    type="file"
+                                    className="hidden"
+                                    multiple
+                                    accept=".pdf,image/*,audio/mpeg,.mp3,.zip"
+                                    onChange={handleFileUpload}
+                                />
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
