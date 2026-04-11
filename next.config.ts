@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["pdfjs-dist", "pdf-lib"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "ucarecdn.com" },

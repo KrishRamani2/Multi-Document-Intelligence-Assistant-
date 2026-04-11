@@ -103,9 +103,17 @@ export async function POST(req: NextRequest) {
     const pdfLibPages = pdfDoc.getPages();
 
     // ── Load with pdfjs-dist (for text coordinates) ─────────────────────
-    // Dynamic import to avoid SSR issues with pdfjs worker
+    // pdfjs-dist is in serverExternalPackages, so it loads directly from
+    // node_modules without Turbopack bundling — worker paths resolve correctly.
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfArrayBuffer) });
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "pdfjs-dist/legacy/build/pdf.worker.mjs";
+
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(pdfArrayBuffer),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: true,
+    });
     const pdfJsDoc = await loadingTask.promise;
     const numPages = pdfJsDoc.numPages;
 
