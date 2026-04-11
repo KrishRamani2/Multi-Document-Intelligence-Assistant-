@@ -10,10 +10,23 @@ import {
     LoaderIcon,
     Mic,
     ArrowUpIcon,
-    Square
+    Square,
+    CheckCircle2,
+    LinkIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as React from "react";
+import { FileUploaderRegular } from "@uploadcare/react-uploader/next";
+import "@uploadcare/react-uploader/core.css";
+
+interface UploadedFile {
+    name: string;
+    cdnUrl: string;
+    uuid: string;
+    size: number;
+    isImage: boolean;
+    mimeType: string;
+}
 
 interface UseAutoResizeTextareaProps {
     minHeight: number;
@@ -57,12 +70,12 @@ function useAutoResizeTextarea({ minHeight, maxHeight }: UseAutoResizeTextareaPr
 
 export function AnimatedAIChat() {
     const [value, setValue] = useState("");
-    const [attachments, setAttachments] = useState<string[]>([]);
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const [isTyping, setIsTyping] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [showUploader, setShowUploader] = useState(false);
     const [, startTransition] = useTransition();
-    
+
     // Audio refs
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -82,13 +95,21 @@ export function AnimatedAIChat() {
     };
 
     const handleSendMessage = () => {
-        if (value.trim() || attachments.length > 0) {
+        if (value.trim() || uploadedFiles.length > 0) {
+            // Log all uploaded file URLs to console for retrieval
+            if (uploadedFiles.length > 0) {
+                console.log("📎 Attached files being sent:");
+                uploadedFiles.forEach((f) => {
+                    console.log(`  → ${f.name}: ${f.cdnUrl}`);
+                });
+            }
+
             startTransition(() => {
                 setIsTyping(true);
                 setTimeout(() => {
                     setIsTyping(false);
                     setValue("");
-                    setAttachments([]);
+                    setUploadedFiles([]);
                     adjustHeight(true);
                 }, 3000);
             });
@@ -96,36 +117,39 @@ export function AnimatedAIChat() {
     };
 
     const handleAttachFile = () => {
-        setIsUploadModalOpen(true);
+        setShowUploader(true);
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        if (files.length === 0) return;
+    // Called per individual file upload success
+    const handleFileUploadSuccess = (e: any) => {
+        const entry = e;
+        if (entry && entry.cdnUrl) {
+            const newFile: UploadedFile = {
+                name: entry.name || "Uploaded file",
+                cdnUrl: entry.cdnUrl,
+                uuid: entry.uuid || "",
+                size: entry.size || 0,
+                isImage: entry.isImage ?? false,
+                mimeType: entry.mimeType || "",
+            };
+            setUploadedFiles((prev) => [...prev, newFile]);
 
-        let newAttachments: string[] = [];
-
-        for (const file of files) {
-            if (file.name.endsWith('.zip') || file.type === 'application/zip') {
-                try {
-                    const JSZip = (await import('jszip')).default;
-                    const zip = new JSZip();
-                    const extracted = await zip.loadAsync(file);
-                    
-                    const extractedFiles = Object.keys(extracted.files).filter(filename => !extracted.files[filename].dir);
-                    newAttachments = [...newAttachments, ...extractedFiles];
-                } catch (error) {
-                    console.error("Error extracting zip:", error);
-                    alert("Failed to extract ZIP file.");
-                }
-            } else {
-                newAttachments.push(file.name);
-            }
+            // Log the CDN URL to console
+            console.log(`✅ File uploaded successfully: ${newFile.name}`);
+            console.log(`   CDN URL: ${newFile.cdnUrl}`);
+            console.log(`   UUID: ${newFile.uuid}`);
+            console.log(`   Size: ${(newFile.size / 1024).toFixed(1)} KB`);
         }
+    };
 
-        setAttachments((prev) => [...prev, ...newAttachments]);
-        setIsUploadModalOpen(false);
-        e.target.value = '';
+    // Called when user clicks "Done" in the uploader
+    const handleDoneClick = (e: any) => {
+        console.log("📦 Upload batch complete. All file URLs:");
+        const allFiles = e?.allEntries?.filter((f: any) => f.status === "success") || [];
+        allFiles.forEach((f: any) => {
+            console.log(`  🔗 ${f.name}: ${f.cdnUrl}`);
+        });
+        setShowUploader(false);
     };
 
     const startRecording = async () => {
@@ -150,7 +174,7 @@ export function AnimatedAIChat() {
 
                 try {
                     setValue(v => v + (v ? " " : "") + "*(Transcribing...)*");
-                    
+
                     const response = await fetch('/api/transcribe', {
                         method: 'POST',
                         body: formData,
@@ -192,8 +216,12 @@ export function AnimatedAIChat() {
         }
     };
 
-    const removeAttachment = (index: number) => {
-        setAttachments((prev) => prev.filter((_, i) => i !== index));
+    const removeUploadedFile = (index: number) => {
+        const removed = uploadedFiles[index];
+        if (removed) {
+            console.log(`🗑️ Removed attachment: ${removed.name} (${removed.cdnUrl})`);
+        }
+        setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
     const getGreeting = () => {
@@ -201,6 +229,12 @@ export function AnimatedAIChat() {
         if (hour < 12) return "Good morning";
         if (hour < 18) return "Good afternoon";
         return "Good evening";
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
     return (
@@ -245,34 +279,49 @@ export function AnimatedAIChat() {
                             />
                         </div>
 
-                        {/* Attachments */}
+                        {/* Uploaded File Attachments */}
                         <AnimatePresence>
-                            {attachments.length > 0 && (
+                            {uploadedFiles.length > 0 && (
                                 <motion.div
-                                    className="px-4 pb-1 flex gap-1.5 flex-wrap"
+                                    className="px-4 pb-2 flex gap-2 flex-wrap"
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: "auto" }}
                                     exit={{ opacity: 0, height: 0 }}
                                 >
-                                    {attachments.map((file, index) => (
-                                        <span
-                                            key={index}
-                                            className="inline-flex items-center gap-1.5 text-[12px] bg-[var(--badge-bg)] text-[var(--badge-fg)] py-1 px-2.5 rounded-md font-medium"
+                                    {uploadedFiles.map((file, index) => (
+                                        <motion.div
+                                            key={`${file.uuid}-${index}`}
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.9 }}
+                                            className="group relative inline-flex items-center gap-2 text-[12px] bg-[var(--badge-bg)] text-[var(--badge-fg)] py-1.5 px-3 rounded-lg font-medium border border-[var(--border)] hover:border-[var(--primary)] transition-all cursor-default"
                                         >
-                                            <FileUp className="w-3 h-3" />
-                                            {file}
+                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                                            <span className="truncate max-w-[120px]">{file.name}</span>
+                                            <span className="text-[10px] text-[var(--muted)] tabular-nums">
+                                                {formatFileSize(file.size)}
+                                            </span>
                                             <button
-                                                onClick={() => removeAttachment(index)}
-                                                className="hover:text-[var(--foreground)] transition-colors"
+                                                onClick={() => removeUploadedFile(index)}
+                                                className="ml-0.5 p-0.5 rounded hover:bg-[var(--surface-hover)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+                                                title="Remove attachment"
                                             >
                                                 <XIcon className="w-3 h-3" />
                                             </button>
-                                        </span>
+
+                                            {/* Tooltip with CDN URL on hover */}
+                                            <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover:block z-50">
+                                                <div className="bg-[var(--surface-raised)] text-[var(--foreground)] text-[10px] px-2.5 py-1.5 rounded-md shadow-lg border border-[var(--border)] whitespace-nowrap flex items-center gap-1.5 max-w-[300px]">
+                                                    <LinkIcon className="w-3 h-3 text-[var(--muted)] flex-shrink-0" />
+                                                    <span className="truncate">{file.cdnUrl}</span>
+                                                </div>
+                                            </div>
+                                        </motion.div>
                                     ))}
                                 </motion.div>
                             )}
                         </AnimatePresence>
-                        
+
                         {/* Recording Indicator */}
                         <AnimatePresence>
                             {isRecording && (
@@ -296,19 +345,24 @@ export function AnimatedAIChat() {
                                 <button
                                     type="button"
                                     onClick={handleAttachFile}
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
-                                    title="Attach file"
+                                    className={cn(
+                                        "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                                        showUploader
+                                            ? "text-[var(--primary)] bg-[var(--primary)]/10"
+                                            : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+                                    )}
+                                    title="Attach file via Uploadcare"
                                 >
                                     <Paperclip className="w-4 h-4" />
                                 </button>
-                                
+
                                 <button
                                     type="button"
                                     onClick={handleToggleAudio}
                                     className={cn(
                                         "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-                                        isRecording 
-                                            ? "text-red-500 bg-red-500/10 hover:bg-red-500/20" 
+                                        isRecording
+                                            ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
                                             : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
                                     )}
                                     title={isRecording ? "Stop recording" : "Record audio"}
@@ -320,10 +374,10 @@ export function AnimatedAIChat() {
                             <button
                                 type="button"
                                 onClick={handleSendMessage}
-                                disabled={isTyping || (!value.trim() && attachments.length === 0)}
+                                disabled={isTyping || (!value.trim() && uploadedFiles.length === 0)}
                                 className={cn(
                                     "inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors border",
-                                    value.trim() || attachments.length > 0
+                                    value.trim() || uploadedFiles.length > 0
                                         ? "bg-[var(--primary)] text-[var(--primary-fg)] border-[var(--primary)] hover:opacity-90"
                                         : "bg-transparent text-[var(--muted)] border-transparent cursor-not-allowed"
                                 )}
@@ -356,15 +410,15 @@ export function AnimatedAIChat() {
                 )}
             </AnimatePresence>
 
-            {/* Upload Modal */}
+            {/* Uploadcare Modal */}
             <AnimatePresence>
-                {isUploadModalOpen && (
+                {showUploader && (
                     <motion.div
                         className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={() => setIsUploadModalOpen(false)}
+                        onClick={() => setShowUploader(false)}
                     >
                         <motion.div
                             className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-2xl w-full max-w-md p-6 shadow-2xl"
@@ -373,41 +427,50 @@ export function AnimatedAIChat() {
                             exit={{ scale: 0.95, opacity: 0, y: 15 }}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="flex items-center justify-between mb-5">
-                                <h2 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">Upload Files</h2>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-semibold tracking-tight text-[var(--foreground)]">Upload Files</h2>
                                 <button
-                                    onClick={() => setIsUploadModalOpen(false)}
+                                    onClick={() => setShowUploader(false)}
                                     className="p-1.5 rounded-full text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-all"
                                 >
                                     <XIcon className="w-5 h-5" />
                                 </button>
                             </div>
-                            
-                            <div 
-                                className="group relative border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center hover:bg-[var(--surface-hover)] hover:border-[var(--primary)] transition-all duration-200 cursor-pointer"
-                                onClick={() => document.getElementById('file-upload')?.click()}
-                            >
-                                <div className="absolute inset-0 bg-[var(--primary)]/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                                <div className="relative z-10 flex flex-col items-center gap-3">
-                                    <div className="p-3 bg-[var(--surface)] rounded-full shadow-sm border border-[var(--border)] group-hover:scale-110 transition-transform duration-200">
-                                        <FileUp className="w-8 h-8 text-[var(--primary)]" />
-                                    </div>
-                                    <div>
-                                        <p className="text-base font-semibold text-[var(--foreground)] mb-1">Click to browse files</p>
-                                        <p className="text-sm text-[var(--muted-foreground)]">
-                                            PDF, Images, MP3, and ZIP (automatically extracted)
-                                        </p>
-                                    </div>
-                                </div>
-                                <input
-                                    id="file-upload"
-                                    type="file"
-                                    className="hidden"
-                                    multiple
-                                    accept=".pdf,image/*,audio/mpeg,.mp3,.zip"
-                                    onChange={handleFileUpload}
+
+                            <div className="uploadcare-chat-wrapper">
+                                <FileUploaderRegular
+                                    sourceList="local, camera, facebook, gdrive"
+                                    classNameUploader="uc-light uc-purple"
+                                    pubkey="f25db25b9fb13ce659fe"
+                                    cdnCname="https://5kcn84nzfr.ucarecd.net/"
+                                    filesViewMode="grid"
+                                    multiple={true}
+                                    onFileUploadSuccess={handleFileUploadSuccess}
+                                    onDoneClick={handleDoneClick}
                                 />
                             </div>
+
+                            {uploadedFiles.length > 0 && (
+                                <div className="mt-4 pt-3 border-t border-[var(--border)]">
+                                    <p className="text-[11px] font-medium text-[var(--muted)] uppercase tracking-wider mb-2">
+                                        Uploaded ({uploadedFiles.length})
+                                    </p>
+                                    <div className="space-y-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
+                                        {uploadedFiles.map((file, idx) => (
+                                            <div
+                                                key={`modal-${file.uuid}-${idx}`}
+                                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--surface-hover)] text-[12px]"
+                                            >
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                                                <span className="truncate flex-1 text-[var(--foreground)]">{file.name}</span>
+                                                <span className="text-[var(--muted)] tabular-nums flex-shrink-0">
+                                                    {formatFileSize(file.size)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </motion.div>
                     </motion.div>
                 )}

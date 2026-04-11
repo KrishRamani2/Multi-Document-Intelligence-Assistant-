@@ -6,6 +6,7 @@ import {
   PanelLeftCloseIcon,
   XIcon,
   MessageSquarePlusIcon,
+  UploadCloudIcon,
   BookOpenIcon,
   NetworkIcon,
   DatabaseIcon,
@@ -25,6 +26,7 @@ import "@uploadcare/react-uploader/core.css";
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showSidebarUploader, setShowSidebarUploader] = useState(false);
   const router = useRouter();
 
   const navItems = [
@@ -40,6 +42,20 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     { title: "Architecture Decisions", time: "1d" },
     { title: "API Refactoring Plan", time: "2d" },
   ];
+
+  // Sidebar upload success handler — logs to console
+  const handleSidebarUploadSuccess = (e: any) => {
+    if (e && e.cdnUrl) {
+      console.log(`📁 [Sidebar] File uploaded: ${e.name}`);
+      console.log(`   CDN URL: ${e.cdnUrl}`);
+      console.log(`   UUID: ${e.uuid}`);
+    }
+  };
+
+  const handleSidebarDoneClick = () => {
+    console.log("📁 [Sidebar] Upload complete");
+    setShowSidebarUploader(false);
+  };
 
   const sidebarContent = (
     <>
@@ -88,25 +104,24 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
             </a>
           ))}
 
-          {/* Uploadcare File Uploader */}
-          <div
+          {/* Upload Files nav item */}
+          <button
+            onClick={() => setShowSidebarUploader(true)}
             className={cn(
-              "px-2.5 pt-2",
-              isSidebarCollapsed && !isMobileSidebarOpen ? "md:px-0 md:flex md:justify-center overflow-hidden" : ""
+              "w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-colors",
+              "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]",
+              isSidebarCollapsed && !isMobileSidebarOpen ? "md:justify-center md:px-0" : ""
             )}
+            title="Upload Files"
           >
-            <div className={cn(
-              isSidebarCollapsed && !isMobileSidebarOpen ? "md:w-8 md:h-8 md:overflow-hidden md:relative" : "w-full"
+            <UploadCloudIcon className="w-4 h-4 flex-shrink-0" />
+            <span className={cn(
+              "truncate",
+              isSidebarCollapsed && !isMobileSidebarOpen ? "md:hidden" : ""
             )}>
-              <FileUploaderRegular
-                sourceList="local, camera, facebook, gdrive"
-                classNameUploader="uc-light uc-purple"
-                pubkey="f25db25b9fb13ce659fe"
-                cdnCname="https://5kcn84nzfr.ucarecd.net/"
-                filesViewMode="grid"
-              />
-            </div>
-          </div>
+              Upload Files
+            </span>
+          </button>
         </nav>
 
         {/* History */}
@@ -243,6 +258,53 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
       </div>
+
+      {/* Sidebar Upload Modal */}
+      <AnimatePresence>
+        {showSidebarUploader && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowSidebarUploader(false)}
+          >
+            <motion.div
+              className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-2xl w-full max-w-md p-6 shadow-2xl"
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <UploadCloudIcon className="w-5 h-5 text-[var(--primary)]" />
+                  <h2 className="text-lg font-semibold tracking-tight text-[var(--foreground)]">Upload Files</h2>
+                </div>
+                <button
+                  onClick={() => setShowSidebarUploader(false)}
+                  className="p-1.5 rounded-full text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-all"
+                >
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="uploadcare-sidebar-wrapper">
+                <FileUploaderRegular
+                  sourceList="local, camera, facebook, gdrive"
+                  classNameUploader="uc-light uc-purple"
+                  pubkey="f25db25b9fb13ce659fe"
+                  cdnCname="https://5kcn84nzfr.ucarecd.net/"
+                  filesViewMode="grid"
+                  multiple={true}
+                  onFileUploadSuccess={handleSidebarUploadSuccess}
+                  onDoneClick={handleSidebarDoneClick}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
