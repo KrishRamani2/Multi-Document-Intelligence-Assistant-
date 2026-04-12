@@ -15,6 +15,7 @@ import {
   SettingsIcon,
   SearchIcon,
   BellIcon,
+  WebhookIcon,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -36,6 +37,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     { name: "Ingestion Wiki", icon: BookOpenIcon, href: "/chat/ingestion-wiki" },
     { name: "Knowledge Graph", icon: NetworkIcon, href: "/chat/knowledge-graph" },
     { name: "Data Sources", icon: DatabaseIcon, href: "/chat/data-sources" },
+    { name: "Channels Integrations", icon: WebhookIcon, href: "/chat/channels" },
   ];
 
   const pastChats = [
