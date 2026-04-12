@@ -929,8 +929,20 @@ export function IngestionWikiViewer() {
   const loadJobs = useCallback(() => {
     const local = JSON.parse(localStorage.getItem("axiom_ingestion_jobs") || "[]");
     if (local.length > 0) {
-      setJobs(local);
-      setSelectedFileId((prev) => prev || local[0].job_id);
+      // Deduplicate by job_id to prevent duplicate React keys
+      const seen = new Set<string>();
+      const deduped = local.filter((j: any) => {
+        const key = j.job_id || j.id;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      // Persist the cleaned list back
+      if (deduped.length !== local.length) {
+        localStorage.setItem("axiom_ingestion_jobs", JSON.stringify(deduped));
+      }
+      setJobs(deduped);
+      setSelectedFileId((prev) => prev || deduped[0]?.job_id);
     } else {
       setJobs(MOCK_FILES as any);
       setSelectedFileId((prev) => prev || MOCK_FILES[0].id);
