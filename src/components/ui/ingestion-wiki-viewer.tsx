@@ -237,6 +237,143 @@ const CHUNK_COLORS: Record<string, { bg: string; border: string; badge: string }
   sentence: { bg: "bg-amber-500/5",   border: "border-amber-500/20",  badge: "bg-amber-500/15 text-amber-400" },
 };
 
+// ─── Rich Chunk Text Renderer ───────────────────────────────────────────────
+// Parses [TABLE: ...] into real tables and highlights [REDACTED]
+
+function parseTableBlock(tableStr: string): { headers: string[]; rows: string[][] } | null {
+  // e.g. "Customer Name City Phone Number Status Priya Nair Bangalore [REDACTED] Active ..."
+  // The first row of words that repeat as keys = headers; rest = data rows
+  const clean = tableStr.trim();
+  if (!clean) return null;
+
+  // Try to detect column count by looking for known header patterns or splitting smartly
+  // Heuristic: split tokens, look for [REDACTED] as single tokens too
+  const tokens: string[] = [];
+  const re = /\[REDACTED\]|[^\s]+/g;
+  let m;
+  while ((m = re.exec(clean)) !== null) tokens.push(m[0]);
+
+  if (tokens.length < 2) return null;
+
+  // Strategy: try common column counts (2-8) and see which produces rows with consistent lengths
+  // For now, we try to find a row of header words that repeats. Simple approach:
+  // Assume table data in the text uses space-separated values and we can attempt to guess columns.
+  // Best guess: look at the first few tokens until we hit a word that might be a value (capitalized, short)
+  // Simplification: try column counts 2..8, pick the one that divides evenly (or closest)
+  for (let cols = 2; cols <= 8; cols++) {
+    if (tokens.length % cols === 0 || (tokens.length - cols) % (cols) === 0) {
+      // First `cols` tokens = headers
+      const hdrs = tokens.slice(0, cols);
+      const dataTokens = tokens.slice(cols);
+      if (dataTokens.length === 0) continue;
+      if (dataTokens.length % cols !== 0) continue;
+      const rows: string[][] = [];
+      for (let i = 0; i < dataTokens.length; i += cols) {
+        rows.push(dataTokens.slice(i, i + cols));
+      }
+      if (rows.length >= 1) return { headers: hdrs, rows };
+    }
+  }
+  // Fallback: just return pairs
+  return null;
+}
+
+function RichChunkText({ text, expanded }: { text: string; expanded?: boolean }) {
+  if (!text) return null;
+
+  // Split text around [TABLE: ...] blocks
+  const tableRegex = /\[TABLE:\s*([\s\S]*?)\]/g;
+  const parts: { type: "text" | "table"; content: string }[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = tableRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", content: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: "table", content: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: "text", content: text.slice(lastIndex) });
+  }
+  if (parts.length === 0) {
+    parts.push({ type: "text", content: text });
+  }
+
+  // Render [REDACTED] within text as black badges
+  const renderTextWithRedacted = (t: string) => {
+    const segs = t.split(/(\[REDACTED\])/g);
+    return segs.map((seg, i) =>
+      seg === "[REDACTED]" ? (
+        <span
+          key={i}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[11px] font-bold text-white bg-black border border-white/10 mx-0.5 align-middle"
+          title="Redacted content"
+        >
+          ██ REDACTED
+        </span>
+      ) : (
+        <span key={i}>{seg}</span>
+      )
+    );
+  };
+
+  return (
+    <div>
+      {parts.map((part, pi) => {
+        if (part.type === "table") {
+          const parsed = parseTableBlock(part.content);
+          if (parsed) {
+            return (
+              <div key={pi} className="my-3 rounded-lg border border-cyan-500/25 overflow-hidden">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 border-b border-cyan-500/20">
+                  <svg className="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+                  </svg>
+                  <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">Table Data</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12px] text-left">
+                    <thead>
+                      <tr className="bg-[var(--surface-hover)]">
+                        {parsed.headers.map((h, hi) => (
+                          <th key={hi} className="px-3 py-2 font-semibold text-[var(--foreground)] border-b border-[var(--border)] whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.rows.map((row, ri) => (
+                        <tr key={ri} className={ri % 2 === 0 ? "bg-transparent" : "bg-[var(--surface-raised)]"}>
+                          {row.map((cell, ci) => (
+                            <td key={ci} className="px-3 py-2 text-[var(--foreground)]/90 border-b border-[var(--border)]/50 whitespace-nowrap">
+                              {cell === "[REDACTED]" ? (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold text-white bg-black border border-white/10">
+                                  ██ REDACTED
+                                </span>
+                              ) : cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          }
+          // Couldn't parse — render as text
+          return <span key={pi}>{renderTextWithRedacted(part.content)}</span>;
+        }
+        return <span key={pi}>{renderTextWithRedacted(part.content)}</span>;
+      })}
+    </div>
+  );
+}
+
 // ─── Chunk Card ─────────────────────────────────────────────────────────────
 
 function ChunkCard({ chunk, index }: { chunk: ChunkItem; index: number }) {
@@ -267,9 +404,9 @@ function ChunkCard({ chunk, index }: { chunk: ChunkItem; index: number }) {
               <span className="truncate">{chunk.heading_path}</span>
             </div>
           )}
-          <p className={cn("text-[13px] leading-relaxed text-[var(--foreground)]", expanded ? "" : "line-clamp-2")}>
-            {chunk.text}
-          </p>
+          <div className={cn("text-[13px] leading-relaxed text-[var(--foreground)]", expanded ? "" : "line-clamp-2")}>
+            <RichChunkText text={chunk.text} expanded={expanded} />
+          </div>
         </div>
         <ChevronDownIcon className={cn("w-4 h-4 shrink-0 text-[var(--muted)] transition-transform", expanded ? "rotate-180" : "")} />
       </div>
@@ -680,9 +817,9 @@ function ChunkExplorerCard({ chunk, index, variant, totalChunks, maxChar }: {
           </div>
 
           {/* Text preview */}
-          <p className={cn("text-[13px] leading-relaxed text-[var(--foreground)]/90", expanded ? "" : "line-clamp-2")}>
-            {chunk.text}
-          </p>
+          <div className={cn("text-[13px] leading-relaxed text-[var(--foreground)]/90", expanded ? "" : "line-clamp-2")}>
+            <RichChunkText text={chunk.text} expanded={expanded} />
+          </div>
 
           {/* Document position bar — shows where this chunk sits in the full document */}
           <div className="mt-3 relative">
@@ -1529,7 +1666,7 @@ export function IngestionWikiViewer() {
                               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">recursive</span>
                               <span className="text-[10px] font-mono text-[var(--muted)]">chars {chunk.start_char}–{chunk.end_char}</span>
                             </div>
-                            <p className="text-[13px] text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">{chunk.text}</p>
+                            <div className="text-[13px] text-[var(--foreground)] leading-relaxed"><RichChunkText text={chunk.text} expanded={true} /></div>
                           </div>
                         ))}
                       </div>
@@ -1995,9 +2132,9 @@ export function IngestionWikiViewer() {
                               </div>
 
                               {/* Text preview */}
-                              <p className="text-[13px] leading-relaxed text-[var(--foreground)]/90 line-clamp-2 mb-3">
-                                {chunk.text}
-                              </p>
+                              <div className="text-[13px] leading-relaxed text-[var(--foreground)]/90 line-clamp-2 mb-3">
+                                <RichChunkText text={chunk.text} />
+                              </div>
 
                               {/* Meta row */}
                               <div className="flex items-center gap-4 text-[10px] text-[var(--muted)] font-mono flex-wrap">

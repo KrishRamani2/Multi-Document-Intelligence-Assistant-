@@ -219,7 +219,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log(`[highlight-pdf] Done. Stats:`, stats);
+    // ── Black-out [REDACTED] text across all pages ──────────────────────
+    const REDACTED_COLOR = rgb(0, 0, 0); // Black
+    const redactedNormalized = normalizeText("[REDACTED]"); // "redacted"
+    let redactedCount = 0;
+
+    for (const pInfo of pagesInfo) {
+      let searchStart = 0;
+      while (true) {
+        const idx = pInfo.normalizedStr.indexOf(redactedNormalized, searchStart);
+        if (idx === -1) break;
+
+        const rectsToBlack: CharRect[] = [];
+        for (let i = 0; i < redactedNormalized.length; i++) {
+          const rect = pInfo.charRects[idx + i];
+          if (rect) rectsToBlack.push(rect);
+        }
+
+        const mergedRects = mergeRectangles(rectsToBlack);
+        const pdfLibPage = pdfLibPages[pInfo.pageIdx];
+
+        for (const r of mergedRects) {
+          pdfLibPage.drawRectangle({
+            x: r.x - PADDING,
+            y: r.y - PADDING,
+            width: r.width + PADDING * 2,
+            height: r.height + PADDING * 2,
+            color: REDACTED_COLOR,
+            opacity: 1, // fully opaque black bar
+          });
+        }
+
+        redactedCount++;
+        searchStart = idx + redactedNormalized.length;
+      }
+    }
+
+    console.log(`[highlight-pdf] Done. Stats:`, { ...stats, redacted_markers: redactedCount });
 
     // ── Save & return the highlighted PDF ────────────────────────────────
     const outputBytes = await pdfDoc.save();
