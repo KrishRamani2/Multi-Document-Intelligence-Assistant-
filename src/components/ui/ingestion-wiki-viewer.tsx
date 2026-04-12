@@ -105,6 +105,9 @@ type DocumentData = {
   temporal_metadata: TemporalMetadata;
   chunk_metadata: Record<string, any>;
   contradictions: any[];
+  redaction_info?: any;
+  redact?: any;
+  redacted_content?: any;
   created_at: string;
   updated_at: string;
 };
@@ -1281,7 +1284,7 @@ export function IngestionWikiViewer() {
             {[
               { key: "pipeline" as const, label: "Pipeline", icon: CpuIcon },
               { key: "chunks" as const, label: "Chunk Explorer", icon: NetworkIcon },
-              { key: "zeroclaw" as const, label: "ZeroClaw", icon: ShieldAlertIcon },
+              { key: "zeroclaw" as const, label: "Akarshak", icon: ShieldAlertIcon },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -1398,6 +1401,33 @@ export function IngestionWikiViewer() {
                   <TemporalMetadataCard temporal={currentDocData.temporal_metadata} />
                 </div>
               )}
+
+              {/* ── Redaction Security ── */}
+              {(() => {
+                const redactData = currentDocData?.redaction_info || currentDocData?.redact || currentDocData?.redacted_content || currentDocData?.chunk_metadata?.redact || currentDocData?.chunk_metadata?.redaction_info;
+                if (!redactData) return null;
+                return (
+                  <div className="mt-10">
+                    <h2 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
+                      Redaction Security
+                    </h2>
+                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 relative overflow-hidden">
+                      <div className="absolute -right-4 -bottom-4 p-4 opacity-[0.03]">
+                        <ShieldAlertIcon className="w-32 h-32 text-rose-500" />
+                      </div>
+                      <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-3">
+                          <ShieldAlertIcon className="w-4 h-4 text-rose-400" />
+                          <h3 className="text-sm font-semibold text-rose-400">Content Redaction Applied</h3>
+                        </div>
+                        <div className="text-[12px] bg-black/40 p-3 rounded-lg border border-white/5 text-[var(--foreground)] opacity-90 leading-relaxed font-mono whitespace-pre-wrap overflow-x-auto">
+                          {typeof redactData === "object" ? JSON.stringify(redactData, null, 2) : String(redactData)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* ── Hierarchical Chunks (inline) ── */}
@@ -1709,7 +1739,7 @@ export function IngestionWikiViewer() {
               <div className="text-center py-20 text-[var(--muted)]">
                 <ShieldAlertIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
                 <p className="text-sm font-medium">Waiting for ingestion to complete</p>
-                <p className="text-[12px] opacity-60 mt-1">ZeroClaw will audit chunks once processing finishes.</p>
+                <p className="text-[12px] opacity-60 mt-1">Akarshak will audit chunks once processing finishes.</p>
               </div>
             ) : zeroClawLoading ? (
               <div className="text-center py-20">
@@ -1720,13 +1750,13 @@ export function IngestionWikiViewer() {
                 >
                   <ScanEyeIcon className="w-12 h-12 text-cyan-500" />
                 </motion.div>
-                <p className="text-sm text-[var(--foreground)] font-medium">Running ZeroClaw Audit…</p>
+                <p className="text-sm text-[var(--foreground)] font-medium">Running Akarshak Audit…</p>
                 <p className="text-[12px] text-[var(--muted)] mt-1">Verifying, checksumming, and scanning for conflicts</p>
               </div>
             ) : zeroClawError ? (
               <div className="text-center py-20 text-[var(--muted)]">
                 <AlertCircleIcon className="w-10 h-10 mx-auto mb-4 text-red-400" />
-                <p className="text-sm font-medium text-red-400">ZeroClaw Audit Failed</p>
+                <p className="text-sm font-medium text-red-400">Akarshak Audit Failed</p>
                 <p className="text-[12px] text-[var(--muted)] mt-1">{zeroClawError}</p>
                 <button
                   onClick={() => { setZeroClawRanFor(null); setMainViewTab("zeroclaw"); }}
@@ -1778,7 +1808,7 @@ export function IngestionWikiViewer() {
                       </div>
                       {/* Summary Stats */}
                       <div className="text-left space-y-3">
-                        <h2 className="text-lg font-semibold text-[var(--foreground)]">ZeroClaw Integrity Report</h2>
+                        <h2 className="text-lg font-semibold text-[var(--foreground)]">Akarshak Integrity Report</h2>
                         <p className="text-[12px] text-[var(--muted)]">
                           Audit completed at {new Date(summary.timestamp).toLocaleTimeString()}
                         </p>
@@ -2001,7 +2031,7 @@ export function IngestionWikiViewer() {
               <div className="text-center py-20 text-[var(--muted)]">
                 <ShieldAlertIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
                 <p className="text-sm font-medium">No audit data available</p>
-                <p className="text-[12px] opacity-60 mt-1">Switch to a completed document to run ZeroClaw.</p>
+                <p className="text-[12px] opacity-60 mt-1">Switch to a completed document to run Akarshak.</p>
               </div>
             )}
           </div>
