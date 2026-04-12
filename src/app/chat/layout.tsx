@@ -49,9 +49,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const determineSourceType = (fileName: string) => {
     const fn = fileName.toLowerCase();
     if (fn.endsWith('.pdf')) return 'pdf';
-    if (fn.endsWith('.docx') || fn.endsWith('.doc')) return 'docx';
-    if (fn.endsWith('.csv')) return 'csv';
+    if (fn.match(/\.(mp3|wav|m4a|aac|ogg)$/)) return 'audio';
     if (fn.match(/\.(jpeg|jpg|gif|png|webp)$/)) return 'image';
+    if (fn.endsWith('.csv')) return 'csv';
+    if (fn.endsWith('.json')) return 'json';
+    if (fn.endsWith('.md')) return 'md';
+    if (fn.match(/\.(html|htm)$/)) return 'html';
+    if (fn.match(/\.(txt|text)$/)) return 'text';
+    if (fn.endsWith('.docx') || fn.endsWith('.doc')) return 'docx';
     return 'document'; // fallback default
   };
 

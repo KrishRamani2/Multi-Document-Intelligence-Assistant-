@@ -126,9 +126,14 @@ export function AnimatedAIChat() {
     const determineSourceType = (fileName: string) => {
         const fn = fileName.toLowerCase();
         if (fn.endsWith('.pdf')) return 'pdf';
-        if (fn.endsWith('.docx') || fn.endsWith('.doc')) return 'docx';
+        if (fn.match(/\.(mp3|wav|m4a|aac|ogg)$/)) return 'audio';
+        if (fn.match(/\.(jpeg|jpg|png|webp|gif)$/)) return 'image';
         if (fn.endsWith('.csv')) return 'csv';
-        if (fn.match(/\.(jpeg|jpg|gif|png|webp)$/)) return 'image';
+        if (fn.endsWith('.json')) return 'json';
+        if (fn.endsWith('.md')) return 'md';
+        if (fn.match(/\.(html|htm)$/)) return 'html';
+        if (fn.match(/\.(txt|text)$/)) return 'text';
+        if (fn.endsWith('.docx') || fn.endsWith('.doc')) return 'docx';
         return 'document';
     };
 
@@ -204,7 +209,7 @@ export function AnimatedAIChat() {
         };
         setUploadedFiles((prev) => [...prev, newFile]);
 
-        const sourceType = linkType === "youtube" ? "youtube" : "web pages";
+        const sourceType = linkType === "youtube" ? "youtube" : "html";
         
         const payload = {
             source_type: sourceType,
