@@ -420,30 +420,35 @@ export function KnowledgeGraphDashboard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
 
-  // ── Load documents from localStorage (same source as IngestionWiki) ──
+  // ── Load documents from /documents API ──
   useEffect(() => {
-    const loadDocs = () => {
-      const jobs = JSON.parse(localStorage.getItem("axiom_ingestion_jobs") || "[]");
-      const completedDocs: DocSummary[] = jobs
-        .filter((j: any) => j.document_id && (j.status === "completed" || j.status === "done"))
-        .map((j: any) => ({
-          document_id: j.document_id,
-          source_name: j.name || j.document_id.slice(0, 12),
-          source_type: j.type || "unknown",
-          sections_count: 0,
-          passages_count: 0,
-          sentences_count: 0,
-          recursive_chunks_count: 0,
-        }));
-      
-      setDocuments(completedDocs);
-      if (completedDocs.length > 0 && !selectedDocId) {
-        setSelectedDocId(completedDocs[0].document_id);
+    const loadDocs = async () => {
+      try {
+        const res = await fetch("/api/proxy/documents");
+        if (!res.ok) return;
+        const data = await res.json();
+        const allDocs: DocSummary[] = (data.documents || [])
+          .filter((d: any) => d.source_type === "pdf")
+          .map((d: any) => ({
+            document_id: d.document_id,
+            source_name: d.source_name || d.document_id.slice(0, 12),
+            source_type: d.source_type,
+            chunks_count: d.chunks_count || 0,
+            sections_count: 0,
+            passages_count: 0,
+            sentences_count: 0,
+            recursive_chunks_count: 0,
+          }));
+
+        setDocuments(allDocs);
+        if (allDocs.length > 0 && !selectedDocId) {
+          setSelectedDocId(allDocs[0].document_id);
+        }
+      } catch (err) {
+        console.error("Failed to load documents list:", err);
       }
     };
     loadDocs();
-    window.addEventListener("axiom_jobs_updated", loadDocs);
-    return () => window.removeEventListener("axiom_jobs_updated", loadDocs);
   }, []);
 
   // ── Fetch document details and build graph ──
@@ -689,7 +694,7 @@ export function KnowledgeGraphDashboard() {
                     {doc.source_name}
                   </p>
                   <p className="text-[10px] text-[var(--muted)] mt-0.5">
-                    {doc.source_type} · {doc.document_id.slice(0, 8)}
+                    <span className="uppercase font-semibold text-red-400">{doc.source_type}</span> · {(doc as any).chunks_count || 0} chunks · {doc.document_id.slice(0, 8)}
                   </p>
                 </div>
                 <ChevronRightIcon className="w-3.5 h-3.5 text-[var(--muted)] shrink-0" />
