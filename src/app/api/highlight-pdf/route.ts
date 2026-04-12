@@ -14,6 +14,7 @@ interface ChunkItem {
   end_char: number;
   heading_path?: string | null;
   level?: string;
+  isTable?: boolean;
 }
 
 interface HighlightRequest {
@@ -159,6 +160,7 @@ export async function POST(req: NextRequest) {
 
     // ── Highlight each chunk ────────────────────────────────────────────
     const HIGHLIGHT_COLOR = rgb(1, 1, 0); // Yellow
+    const TABLE_COLOR = rgb(0.2, 0.6, 1); // Blue
     const HIGHLIGHT_OPACITY = 0.4;
     const PADDING = 2;
 
@@ -201,7 +203,7 @@ export async function POST(req: NextRequest) {
               y: r.y - PADDING,
               width: r.width + PADDING * 2,
               height: r.height + PADDING * 2,
-              color: HIGHLIGHT_COLOR,
+              color: chunk.isTable ? TABLE_COLOR : HIGHLIGHT_COLOR,
               opacity: HIGHLIGHT_OPACITY,
             });
           }

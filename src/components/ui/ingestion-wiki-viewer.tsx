@@ -106,6 +106,7 @@ type DocumentData = {
   chunk_metadata: Record<string, any>;
   contradictions: any[];
   redaction_info?: any;
+  pii_report?: any;
   redact?: any;
   redacted_content?: any;
   created_at: string;
@@ -1155,11 +1156,26 @@ export function IngestionWikiViewer() {
                   setIsHighlighting(true);
                   setHighlightError(null);
                   try {
-                    const allChunks = [
-                      ...(currentDocData.hierarchical_chunks?.sections || []).map((c: any) => ({ ...c, level: "section" })),
-                      ...(currentDocData.hierarchical_chunks?.passages || []).map((c: any) => ({ ...c, level: "passage" })),
-                      ...(currentDocData.hierarchical_chunks?.sentences || []).map((c: any) => ({ ...c, level: "sentence" })),
-                    ];
+                    // Extract chunks and flatten tables if they exist
+                    const allChunks: any[] = [];
+                    const processGroup = (group: any[], level: string) => {
+                      if (!group) return;
+                      group.forEach((c: any) => {
+                        allChunks.push({ ...c, level });
+                        if (c.tables && Array.isArray(c.tables)) {
+                          c.tables.forEach((t: any) => {
+                            if (t.text) {
+                              allChunks.push({ chunk_id: c.chunk_id + "-table", text: t.text, start_char: t.start_char || 0, end_char: t.end_char || 0, isTable: true });
+                            }
+                          });
+                        }
+                      });
+                    };
+
+                    processGroup(currentDocData.hierarchical_chunks?.sections, "section");
+                    processGroup(currentDocData.hierarchical_chunks?.passages, "passage");
+                    processGroup(currentDocData.hierarchical_chunks?.sentences, "sentence");
+
                     const res = await fetch("/api/highlight-pdf", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -1404,8 +1420,8 @@ export function IngestionWikiViewer() {
 
               {/* ── Redaction Security ── */}
               {(() => {
-                const redactData = currentDocData?.redaction_info || currentDocData?.redact || currentDocData?.redacted_content || currentDocData?.chunk_metadata?.redact || currentDocData?.chunk_metadata?.redaction_info;
-                if (!redactData) return null;
+                const redactData = currentDocData?.pii_report || currentDocData?.redaction_info || currentDocData?.redact || currentDocData?.redacted_content || currentDocData?.chunk_metadata?.redact || currentDocData?.chunk_metadata?.redaction_info;
+                if (!redactData || (redactData.redaction_count === 0 && !redactData.redactions)) return null;
                 return (
                   <div className="mt-10">
                     <h2 className="text-[13px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
