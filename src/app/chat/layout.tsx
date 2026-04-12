@@ -67,9 +67,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       console.log(`   CDN URL: ${e.cdnUrl}`);
       console.log(`   UUID: ${e.uuid}`);
       
+      const sourceType = determineSourceType(e.name);
       const payload = {
-        source_type: determineSourceType(e.name),
-        file_url: e.cdnUrl
+        source_type: sourceType,
+        file_url: e.cdnUrl,
+        source_location: "cdn",
+        redact: true
       };
 
       try {

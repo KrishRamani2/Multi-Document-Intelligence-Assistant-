@@ -155,9 +155,12 @@ export function AnimatedAIChat() {
             console.log(`✅ File uploaded successfully: ${newFile.name}`);
             console.log(`   CDN URL: ${newFile.cdnUrl}`);
             
+            const sourceType = determineSourceType(newFile.name);
             const payload = {
-                source_type: determineSourceType(newFile.name),
-                file_url: newFile.cdnUrl
+                source_type: sourceType,
+                file_url: newFile.cdnUrl,
+                source_location: "cdn",
+                redact: true
             };
             
             try {
@@ -213,7 +216,9 @@ export function AnimatedAIChat() {
         
         const payload = {
             source_type: sourceType,
-            file_url: linkInput
+            file_url: linkInput,
+            source_location: "url",
+            redact: true
         };
         
         try {

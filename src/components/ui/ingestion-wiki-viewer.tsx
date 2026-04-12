@@ -852,6 +852,19 @@ export function IngestionWikiViewer() {
 
         try {
           const res = await fetch(`/api/proxy/ingest/${job.job_id}`);
+          
+          if (res.status === 404) {
+            // Stop polling immediately and mark as failed if the API returns 404
+            setJobs((prevJobs) => {
+              const updated = prevJobs.map((j) =>
+                j.job_id === job.job_id ? { ...j, status: "failed", document_id: undefined } : j
+              );
+              localStorage.setItem("axiom_ingestion_jobs", JSON.stringify(updated.filter((j) => j.job_id)));
+              return updated;
+            });
+            continue;
+          }
+
           if (!res.ok) continue;
 
           const data = await res.json();
