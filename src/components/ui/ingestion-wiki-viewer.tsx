@@ -37,6 +37,11 @@ import {
   SearchIcon,
   SplitIcon,
   BoxIcon,
+  ShieldAlertIcon,
+  FingerprintIcon,
+  ScanEyeIcon,
+  LinkIcon,
+  AlertTriangleIcon,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -762,8 +767,8 @@ export function IngestionWikiViewer() {
   const [highlightStats, setHighlightStats] = useState<{ total_chunks: number; highlighted: number; missing: number; pages_processed: number } | null>(null);
   const [highlightError, setHighlightError] = useState<string | null>(null);
 
-  // Main view tab: Pipeline vs Chunk Explorer
-  const [mainViewTab, setMainViewTab] = useState<"pipeline" | "chunks">("pipeline");
+  // Main view tab: Pipeline vs Chunk Explorer vs ZeroClaw
+  const [mainViewTab, setMainViewTab] = useState<"pipeline" | "chunks" | "zeroclaw">("pipeline");
 
   // Chunk Explorer API data (fetched from dedicated endpoints)
   const [apiHierarchicalChunks, setApiHierarchicalChunks] = useState<any[]>([]);
@@ -771,6 +776,13 @@ export function IngestionWikiViewer() {
   const [chunkExplorerLoading, setChunkExplorerLoading] = useState(false);
   const [chunkExplorerLoaded, setChunkExplorerLoaded] = useState<string | null>(null);
   const [chunkSearchQuery, setChunkSearchQuery] = useState("");
+
+  // ZeroClaw state
+  const [zeroClawData, setZeroClawData] = useState<any>(null);
+  const [zeroClawLoading, setZeroClawLoading] = useState(false);
+  const [zeroClawError, setZeroClawError] = useState<string | null>(null);
+  const [zeroClawRanFor, setZeroClawRanFor] = useState<string | null>(null);
+  const [zeroClawFilter, setZeroClawFilter] = useState<"all" | "verified" | "unverified" | "conflicts">("all");
 
   // ── Load jobs ────────────────────────────────────────────────────────────
   const loadJobs = useCallback(() => {
@@ -1256,18 +1268,19 @@ export function IngestionWikiViewer() {
             {[
               { key: "pipeline" as const, label: "Pipeline", icon: CpuIcon },
               { key: "chunks" as const, label: "Chunk Explorer", icon: NetworkIcon },
+              { key: "zeroclaw" as const, label: "ZeroClaw", icon: ShieldAlertIcon },
             ].map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => {
                   setMainViewTab(tab.key);
+                  const docId = (() => {
+                    if (!selectedJob) return null;
+                    const d = jobDetails[selectedJob.job_id];
+                    return d?.document_id || selectedJob.document_id || null;
+                  })();
                   // Auto-fetch chunk explorer data when switching to it
                   if (tab.key === "chunks" && renderJob.status === "completed") {
-                    const docId = (() => {
-                      if (!selectedJob) return null;
-                      const d = jobDetails[selectedJob.job_id];
-                      return d?.document_id || selectedJob.document_id || null;
-                    })();
                     if (docId && chunkExplorerLoaded !== docId) {
                       setChunkExplorerLoading(true);
                       Promise.all([
@@ -1278,6 +1291,38 @@ export function IngestionWikiViewer() {
                         setApiRecursiveChunks(rec?.chunks || []);
                         setChunkExplorerLoaded(docId);
                       }).catch(console.error).finally(() => setChunkExplorerLoading(false));
+                    }
+                  }
+                  // Auto-run ZeroClaw when switching to it
+                  if (tab.key === "zeroclaw" && renderJob.status === "completed") {
+                    if (docId && zeroClawRanFor !== docId) {
+                      setZeroClawLoading(true);
+                      setZeroClawError(null);
+                      setZeroClawData(null);
+                      // Fetch chunks first, then run ZeroClaw
+                      Promise.all([
+                        fetch(`/api/proxy/documents/${docId}/hierarchical`).then(r => r.ok ? r.json() : null),
+                        fetch(`/api/proxy/documents/${docId}/recursive`).then(r => r.ok ? r.json() : null),
+                      ]).then(async ([hier, rec]) => {
+                        const allChunks = [...(hier?.chunks || []), ...(rec?.chunks || [])];
+                        if (allChunks.length === 0) {
+                          throw new Error("No chunks found for this document");
+                        }
+                        // Build full text from all chunks for verification
+                        const fullText = allChunks.map((c: any) => c.text || "").join(" ");
+                        // Run ZeroClaw
+                        const zcRes = await fetch("/api/zeroclaw", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ chunks: allChunks, full_text: fullText }),
+                        });
+                        if (!zcRes.ok) throw new Error(`ZeroClaw API returned ${zcRes.status}`);
+                        const zcData = await zcRes.json();
+                        setZeroClawData(zcData);
+                        setZeroClawRanFor(docId);
+                      }).catch((err) => {
+                        setZeroClawError(err.message);
+                      }).finally(() => setZeroClawLoading(false));
                     }
                   }
                 }}
@@ -1644,6 +1689,310 @@ export function IngestionWikiViewer() {
             </div>
           );
         })()}
+        {/* ═══════════════ ZEROCLAW GOVERNANCE VIEW ═══════════════ */}
+        {mainViewTab === "zeroclaw" && (
+          <div className="max-w-4xl mx-auto py-8 px-8 pb-16">
+            {renderJob.status !== "completed" ? (
+              <div className="text-center py-20 text-[var(--muted)]">
+                <ShieldAlertIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
+                <p className="text-sm font-medium">Waiting for ingestion to complete</p>
+                <p className="text-[12px] opacity-60 mt-1">ZeroClaw will audit chunks once processing finishes.</p>
+              </div>
+            ) : zeroClawLoading ? (
+              <div className="text-center py-20">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                  className="w-12 h-12 mx-auto mb-4"
+                >
+                  <ScanEyeIcon className="w-12 h-12 text-cyan-500" />
+                </motion.div>
+                <p className="text-sm text-[var(--foreground)] font-medium">Running ZeroClaw Audit…</p>
+                <p className="text-[12px] text-[var(--muted)] mt-1">Verifying, checksumming, and scanning for conflicts</p>
+              </div>
+            ) : zeroClawError ? (
+              <div className="text-center py-20 text-[var(--muted)]">
+                <AlertCircleIcon className="w-10 h-10 mx-auto mb-4 text-red-400" />
+                <p className="text-sm font-medium text-red-400">ZeroClaw Audit Failed</p>
+                <p className="text-[12px] text-[var(--muted)] mt-1">{zeroClawError}</p>
+                <button
+                  onClick={() => { setZeroClawRanFor(null); setMainViewTab("zeroclaw"); }}
+                  className="mt-4 px-4 py-2 text-sm bg-[var(--surface-raised)] border border-[var(--border)] rounded-lg text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : zeroClawData ? (() => {
+              const summary = zeroClawData.summary;
+              const chunks = zeroClawData.chunks || [];
+
+              // Filter chunks
+              const filteredChunks = chunks.filter((c: any) => {
+                if (zeroClawFilter === "verified") return c.verified;
+                if (zeroClawFilter === "unverified") return !c.verified;
+                if (zeroClawFilter === "conflicts") return c.conflicts.length > 0;
+                return true;
+              });
+
+              // Integrity score gradient
+              const score = summary.integrity_score || 0;
+              const scoreColor = score >= 80 ? "text-emerald-400" : score >= 50 ? "text-amber-400" : "text-red-400";
+              const scoreBg = score >= 80 ? "from-emerald-500/20" : score >= 50 ? "from-amber-500/20" : "from-red-500/20";
+              const scoreRingColor = score >= 80 ? "stroke-emerald-500" : score >= 50 ? "stroke-amber-500" : "stroke-red-500";
+
+              return (
+                <>
+                  {/* ── Integrity Score Hero ── */}
+                  <div className={cn("rounded-2xl border border-[var(--border)] bg-gradient-to-b to-transparent p-8 mb-8 text-center", scoreBg)}>
+                    <div className="flex items-center justify-center gap-8">
+                      {/* Score Ring */}
+                      <div className="relative w-32 h-32">
+                        <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
+                          <circle cx="60" cy="60" r="52" fill="none" stroke="currentColor" strokeWidth="8" className="text-[var(--border)]" />
+                          <motion.circle
+                            cx="60" cy="60" r="52" fill="none" strokeWidth="8" strokeLinecap="round"
+                            className={scoreRingColor}
+                            strokeDasharray={`${2 * Math.PI * 52}`}
+                            initial={{ strokeDashoffset: 2 * Math.PI * 52 }}
+                            animate={{ strokeDashoffset: 2 * Math.PI * 52 * (1 - score / 100) }}
+                            transition={{ duration: 1.5, ease: "easeOut" }}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className={cn("text-3xl font-bold", scoreColor)}>{score}</span>
+                          <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider">Score</span>
+                        </div>
+                      </div>
+                      {/* Summary Stats */}
+                      <div className="text-left space-y-3">
+                        <h2 className="text-lg font-semibold text-[var(--foreground)]">ZeroClaw Integrity Report</h2>
+                        <p className="text-[12px] text-[var(--muted)]">
+                          Audit completed at {new Date(summary.timestamp).toLocaleTimeString()}
+                        </p>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[12px]">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span className="text-[var(--muted)]">Verified:</span>
+                            <span className="font-semibold text-emerald-400">{summary.verified_count}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-500" />
+                            <span className="text-[var(--muted)]">Unverified:</span>
+                            <span className="font-semibold text-red-400">{summary.unverified_count}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-amber-500" />
+                            <span className="text-[var(--muted)]">Conflicts:</span>
+                            <span className="font-semibold text-amber-400">{summary.conflict_pairs} pairs</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                            <span className="text-[var(--muted)]">Avg Confidence:</span>
+                            <span className="font-semibold text-cyan-400">{Math.round(summary.avg_confidence * 100)}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Stat Cards ── */}
+                  <div className="grid grid-cols-4 gap-3 mb-8">
+                    {[
+                      { icon: CheckCircle2Icon, label: "Verified", value: summary.verified_count, color: "emerald" },
+                      { icon: AlertCircleIcon, label: "Unverified", value: summary.unverified_count, color: "red" },
+                      { icon: AlertTriangleIcon, label: "Conflicts", value: summary.conflicting_chunks, color: "amber" },
+                      { icon: FingerprintIcon, label: "Checksummed", value: summary.total_chunks, color: "cyan" },
+                    ].map(({ icon: Icon, label, value, color }) => (
+                      <div key={label} className={cn("rounded-xl border p-4 text-center",
+                        `border-${color}-500/20 bg-${color}-500/5`
+                      )}>
+                        <Icon className={cn("w-5 h-5 mx-auto mb-2", `text-${color}-400`)} />
+                        <p className={cn("text-xl font-bold", `text-${color}-400`)}>{value}</p>
+                        <p className="text-[10px] text-[var(--muted)] mt-0.5">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Filter Tabs ── */}
+                  <div className="flex gap-1 mb-6 bg-[var(--surface-raised)] border border-[var(--border)] rounded-xl p-1">
+                    {[
+                      { key: "all" as const, label: "All", count: chunks.length },
+                      { key: "verified" as const, label: "Verified", count: summary.verified_count },
+                      { key: "unverified" as const, label: "Unverified", count: summary.unverified_count },
+                      { key: "conflicts" as const, label: "Conflicts", count: summary.conflicting_chunks },
+                    ].map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setZeroClawFilter(f.key)}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[12px] font-medium transition-colors",
+                          zeroClawFilter === f.key
+                            ? "bg-[var(--surface-hover)] text-[var(--foreground)] shadow-sm"
+                            : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                        )}
+                      >
+                        {f.label}
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full",
+                          zeroClawFilter === f.key
+                            ? "bg-[var(--foreground)]/10 text-[var(--foreground)]"
+                            : "bg-[var(--surface-hover)] text-[var(--muted)]"
+                        )}>{f.count}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ── Chunk Audit Cards (Connected Timeline) ── */}
+                  <div>
+                    {filteredChunks.map((chunk: any, idx: number) => {
+                      const isVerified = chunk.verified;
+                      const hasConflicts = chunk.conflicts.length > 0;
+                      const confidencePct = Math.round(chunk.confidence * 100);
+                      const isLast = idx === filteredChunks.length - 1;
+
+                      return (
+                        <motion.div
+                          key={chunk.chunk_id || idx}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.04, type: "spring", stiffness: 200 }}
+                          className="relative flex gap-0"
+                        >
+                          {/* Timeline node */}
+                          <div className="flex flex-col items-center w-12 shrink-0 pt-5 relative">
+                            {idx > 0 && <div className={cn("absolute top-0 w-0.5 h-5",
+                              isVerified ? "bg-emerald-500/20" : "bg-red-500/20"
+                            )} />}
+                            <div className="relative z-10">
+                              <div className={cn("w-4 h-4 rounded-full border-2 transition-all",
+                                isVerified
+                                  ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                                  : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+                              )}>
+                                {isVerified
+                                  ? <CheckIcon className="w-2.5 h-2.5 text-white absolute top-[3px] left-[3px]" />
+                                  : <XIcon className="w-2.5 h-2.5 text-white absolute top-[3px] left-[3px]" />
+                                }
+                              </div>
+                            </div>
+                            {!isLast && <div className={cn("flex-1 w-0.5 min-h-[20px]",
+                              isVerified ? "bg-emerald-500/15" : "bg-red-500/15"
+                            )} />}
+                          </div>
+
+                          {/* Card */}
+                          <div className="flex-1 mb-3 rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--surface-raised)] hover:shadow-lg transition-all">
+                            {/* Gradient bar */}
+                            <div className={cn("h-0.5 bg-gradient-to-r",
+                              isVerified
+                                ? "from-emerald-500/40 via-emerald-500/15 to-transparent"
+                                : "from-red-500/40 via-red-500/15 to-transparent"
+                            )} />
+
+                            <div className="px-4 py-3.5">
+                              {/* Header row */}
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[14px] font-bold text-[var(--foreground)] tabular-nums">
+                                    {String(idx + 1).padStart(2, "0")}
+                                  </span>
+                                  {/* Verified badge */}
+                                  <span className={cn("text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                                    isVerified
+                                      ? "bg-emerald-500/12 text-emerald-400 border-emerald-500/25"
+                                      : "bg-red-500/12 text-red-400 border-red-500/25"
+                                  )}>
+                                    {isVerified ? "VERIFIED" : "UNVERIFIED"}
+                                  </span>
+                                  {/* Level */}
+                                  <span className="text-[9px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--surface-hover)] text-[var(--muted)] border border-[var(--border)]">
+                                    {chunk.level || "chunk"}
+                                  </span>
+                                  {/* Conflict badge */}
+                                  {hasConflicts && (
+                                    <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/12 text-amber-400 border border-amber-500/25 flex items-center gap-1">
+                                      <AlertTriangleIcon className="w-2.5 h-2.5" />
+                                      {chunk.conflicts.length} CONFLICT{chunk.conflicts.length > 1 ? "S" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Confidence meter */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="w-16 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
+                                    <motion.div
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${confidencePct}%` }}
+                                      transition={{ delay: idx * 0.04 + 0.3, duration: 0.5 }}
+                                      className={cn("h-full rounded-full",
+                                        confidencePct >= 80 ? "bg-emerald-500" :
+                                        confidencePct >= 50 ? "bg-amber-500" : "bg-red-500"
+                                      )}
+                                    />
+                                  </div>
+                                  <span className={cn("text-[10px] font-mono font-bold",
+                                    confidencePct >= 80 ? "text-emerald-400" :
+                                    confidencePct >= 50 ? "text-amber-400" : "text-red-400"
+                                  )}>{confidencePct}%</span>
+                                </div>
+                              </div>
+
+                              {/* Text preview */}
+                              <p className="text-[13px] leading-relaxed text-[var(--foreground)]/90 line-clamp-2 mb-3">
+                                {chunk.text}
+                              </p>
+
+                              {/* Meta row */}
+                              <div className="flex items-center gap-4 text-[10px] text-[var(--muted)] font-mono flex-wrap">
+                                <span className="flex items-center gap-1">
+                                  <FingerprintIcon className="w-3 h-3 opacity-50" />
+                                  {chunk.checksum?.slice(0, 12)}…
+                                </span>
+                                <span>chars {chunk.start_char}–{chunk.end_char}</span>
+                                <span>{chunk.text_length} chars</span>
+                                {chunk.source_coverage > 0 && (
+                                  <span>{chunk.source_coverage}% coverage</span>
+                                )}
+                              </div>
+
+                              {/* Conflict Details */}
+                              {hasConflicts && (
+                                <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <LinkIcon className="w-3 h-3 text-amber-400" />
+                                    <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
+                                      Conflict Details
+                                    </span>
+                                  </div>
+                                  {chunk.conflict_details?.map((cd: any, ci: number) => (
+                                    <div key={ci} className="flex items-start gap-2 text-[11px] text-[var(--muted)] mt-1">
+                                      <AlertTriangleIcon className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />
+                                      <span>{cd.reason}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                    {filteredChunks.length === 0 && (
+                      <div className="text-center py-12 text-[var(--muted)]">
+                        <ShieldAlertIcon className="w-8 h-8 mx-auto mb-3 opacity-25" />
+                        <p className="text-sm">No chunks match the selected filter.</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })() : (
+              <div className="text-center py-20 text-[var(--muted)]">
+                <ShieldAlertIcon className="w-12 h-12 mx-auto mb-4 opacity-25" />
+                <p className="text-sm font-medium">No audit data available</p>
+                <p className="text-[12px] opacity-60 mt-1">Switch to a completed document to run ZeroClaw.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
