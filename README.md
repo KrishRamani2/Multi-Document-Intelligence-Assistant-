@@ -5,6 +5,8 @@ Watch the demo to see the project in action:
 
 ▶️ **[Watch Demo Video](https://canva.link/7hald4q3tw6puvt)** 
 
+Backend:**[Link](https://github.com/KrishRamani2/Multi-Document-Intelligence-Assistant-backend)**
+
 ## Getting Started
 
 First, run the development server:
