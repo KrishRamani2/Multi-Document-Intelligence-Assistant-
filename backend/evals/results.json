@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-04-12T09:38:08.867751",
+  "results": [
+    {
+      "mode": "basic",
+      "embedder": "huggingface",
+      "top_k": 5,
+      "num_queries": 5,
+      "avg_retrieval_time_ms": 0,
+      "avg_embedding_time_ms": 0,
+      "avg_search_time_ms": 0,
+      "p50_retrieval_ms": 0,
+      "p95_retrieval_ms": 0,
+      "p99_retrieval_ms": 0,
+      "avg_precision_at_k": 0,
+      "avg_recall_at_k": 0,
+      "mrr": 0,
+      "ndcg": 0,
+      "ragas_faithfulness": 0,
+      "ragas_answer_relevance": 0,
+      "ragas_context_precision": 0,
+      "ragas_context_recall": 0,
+      "total_time_seconds": 1.5545282363891602
+    }
+  ]
+}

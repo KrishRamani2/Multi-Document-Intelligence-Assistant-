@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Tester</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        h2 { color: #555; margin-top: 30px; }
+        .section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        textarea { height: 80px; font-family: monospace; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        button:hover { background: #0056b3; }
+        button.secondary { background: #6c757d; }
+        button.secondary:hover { background: #545b62; }
+        .result { background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 15px; white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 300px; overflow: auto; }
+        .status-pending { color: #ffc107; }
+        .status-processing { color: #17a2b8; }
+        .status-completed { color: #28a745; }
+        .status-failed { color: #dc3545; }
+        .status-needs_review { color: #fd7e14; }
+    </style>
+</head>
+<body>
+    <h1>🔧 API Tester</h1>
+
+    <!-- Ingest -->
+    <div class="section">
+        <h2>1. Ingest Document</h2>
+        <label>Source Type</label>
+        <select id="sourceType">
+            <option value="pdf">PDF</option>
+            <option value="youtube">YouTube</option>
+            <option value="html">HTML</option>
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+            <option value="md">Markdown</option>
+            <option value="text">Text</option>
+        </select>
+        
+        <label>File URL</label>
+        <input type="text" id="fileUrl" placeholder="https://...">
+        
+        <button onclick="ingest()">Start Ingestion</button>
+        
+        <div id="ingestResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Job Status -->
+    <div class="section">
+        <h2>2. Check Job Status</h2>
+        <label>Job ID</label>
+        <input type="text" id="jobId" placeholder="Enter job ID from step 1">
+        <button onclick="checkJob()">Check Status</button>
+        
+        <div id="jobResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- List Documents -->
+    <div class="section">
+        <h2>3. List Documents</h2>
+        <button onclick="listDocs()">Get Documents</button>
+        
+        <div id="docsResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Search -->
+    <div class="section">
+        <h2>4. Search</h2>
+        <label>Query</label>
+        <input type="text" id="searchQuery" placeholder="Enter search query">
+        
+        <label>Options</label>
+        <label><input type="checkbox" id="useHybrid" checked> Use Hybrid Search</label>
+        
+        <button onclick="search()">Search</button>
+        
+        <div id="searchResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="section">
+        <h2>5. Stats</h2>
+        <button onclick="getStats()">Get Stats</button>
+        
+        <div id="statsResult" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8000';
+
+        function show(id, data) {
+            const el = document.getElementById(id);
+            el.style.display = 'block';
+            el.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function ingest() {
+            const source_type = document.getElementById('sourceType').value;
+            const file_url = document.getElementById('fileUrl').value;
+            
+            if (!file_url) {
+                alert('Please enter a file URL');
+                return;
+            }
+
+            try {
+                const res = await fetch(API + '/ingest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source_type, file_url })
+                });
+                const data = await res.json();
+                show('ingestResult', data);
+                
+                if (data.job_id) {
+                    document.getElementById('jobId').value = data.job_id;
+                }
+            } catch (e) {
+                show('ingestResult', { error: e.message });
+            }
+        }
+
+        async function checkJob() {
+            const job_id = document.getElementById('jobId').value;
+            if (!job_id) { alert('Enter job ID'); return; }
+
+            const poll = async () => {
+                try {
+                    const res = await fetch(API + '/ingest/' + job_id);
+                    const data = await res.json();
+                    show('jobResult', data);
+
+                    if (data.status === 'pending' || data.status === 'processing') {
+                        setTimeout(poll, 2000);
+                    }
+                } catch (e) {
+                    show('jobResult', { error: e.message });
+                }
+            };
+            poll();
+        }
+
+        async function listDocs() {
+            try {
+                const res = await fetch(API + '/documents');
+                const data = await res.json();
+                show('docsResult', data);
+            } catch (e) {
+                show('docsResult', { error: e.message });
+            }
+        }
+
+        async function search() {
+            const query = document.getElementById('searchQuery').value;
+            if (!query) { alert('Enter query'); return; }
+
+            const use_hybrid = document.getElementById('useHybrid').checked;
+
+            try {
+                const res = await fetch(API + '/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        query, 
+                        use_hybrid,
+                        use_multi_query: false,
+                        limit: 10
+                    })
+                });
+                const data = await res.json();
+                show('searchResult', data);
+            } catch (e) {
+                show('searchResult', { error: e.message });
+            }
+        }
+
+        async function getStats() {
+            try {
+                const res = await fetch(API + '/search/stats');
+                const data = await res.json();
+                show('statsResult', data);
+            } catch (e) {
+                show('statsResult', { error: e.message });
+            }
+        }
+    </script>
+</body>
+</html>

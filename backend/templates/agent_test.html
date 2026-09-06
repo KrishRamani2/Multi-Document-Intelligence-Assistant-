@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Test UI - Streaming</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; 
+        }
+        h1 { color: #333; }
+        
+        .container { display: flex; gap: 20px; }
+        .left-panel { flex: 1; }
+        .right-panel { flex: 1; }
+        
+        .section { 
+            background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        }
+        
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        textarea { 
+            width: 100%; padding: 12px; margin-bottom: 10px; 
+            border: 1px solid #ddd; border-radius: 4px; font-family: monospace;
+        }
+        input[type="text"] {
+            width: 100%; padding: 12px; margin-bottom: 10px;
+            border: 1px solid #ddd; border-radius: 4px;
+        }
+        
+        button { 
+            background: #007bff; color: white; padding: 10px 20px; 
+            border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;
+        }
+        button:hover { background: #0056b3; }
+        
+        /* Event log */
+        .event-log { 
+            max-height: 500px; overflow-y: auto; 
+            background: #1e1e1e; color: #ddd; padding: 15px; 
+            border-radius: 4px; font-family: monospace; font-size: 12px;
+        }
+        .event { margin-bottom: 8px; padding: 8px; border-radius: 4px; }
+        .event.thinking { background: #2d3748; border-left: 3px solid #4299e1; }
+        .event.tool_call { background: #1a365d; border-left: 3px solid #48bb78; }
+        .event.tool_result { background: #1a202c; border-left: 3px solid #68d391; }
+        .event.chart { background: #2c5282; border-left: 3px solid #ecc94b; }
+        .event.video { background: #553c9a; border-left: 3px solid #b794f4; }
+        .event.source { background: #285e61; border-left: 3px solid #4fd1c5; }
+        .event.complete { background: #22543d; border-left: 3px solid #48bb78; }
+        .event.error { background: #742a2a; border-left: 3px solid #fc8181; }
+        
+        .event-type { color: #a0aec0; font-size: 10px; }
+        .event-data { color: #e2e8f0; white-space: pre-wrap; }
+        
+        /* Widgets */
+        .widget { margin-bottom: 15px; padding: 15px; border-radius: 4px; }
+        .widget.chart { background: #f7fafc; border: 1px solid #e2e8f0; }
+        .widget.video { background: #faf5ff; border: 1px solid #e9d8fd; }
+        .widget.sources { background: #f0fff4; border: 1px solid #c6f6d5; }
+        .widget.text { background: white; border: 1px solid #e2e8f0; }
+        
+        /* Answer display */
+        .answer-container { background: white; padding: 15px; border-radius: 8px; }
+        .answer-text { font-size: 16px; line-height: 1.6; color: #2d3748; }
+        
+        .sources-list { margin-top: 10px; }
+        .source-item { 
+            padding: 8px; background: #f7fafc; margin: 5px 0; 
+            border-radius: 4px; font-size: 12px; 
+        }
+        .source-score { color: #38a169; font-weight: bold; }
+        
+        /* Chart container */
+        #chart-container { width: 100%; height: 400px; }
+        
+        /* Video embed */
+        .video-embed { position: relative; padding-bottom: 56.25%; height: 0; }
+        .video-embed iframe { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+        }
+        
+        /* Status indicator */
+        .status { 
+            display: inline-block; width: 10px; height: 10px; 
+            border-radius: 50%; margin-right: 8px; 
+        }
+        .status.thinking { background: #4299e1; animation: pulse 1s infinite; }
+        .status.processing { background: #48bb78; }
+        .status.complete { background: #38a169; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 Agent Test UI</h1>
+    
+    <div class="container">
+        <div class="left-panel">
+            <!-- Query Input -->
+            <div class="section">
+                <label>Query</label>
+                <textarea id="query" rows="3" placeholder="Try: 'show me revenue chart', 'what is the revenue trend', 'which region performs best', 'show regional comparison'">What is the revenue growth?</textarea>
+                
+                <label>Options</label>
+                <div>
+                    <label style="display:inline;">
+                        <input type="checkbox" id="stream"> Stream
+                    </label>
+                    <label style="display:inline; margin-left: 20px;">
+                        <input type="checkbox" id="contextenable">
+                        Context
+                    </label>
+                </div>
+                
+                <button onclick="submitQuery()">Submit</button>
+                <button onclick="clearLog()">Clear</button>
+                
+                <div style="margin-top: 10px;">
+                    <span class="status" id="status-indicator"></span>
+                    <span id="status-text">Ready</span>
+                </div>
+            </div>
+            
+            <!-- Event Log -->
+            <div class="section">
+                <label>Event Log</label>
+                <div class="event-log" id="event-log"></div>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <!-- Answer -->
+            <div class="section">
+                <label>Answer</label>
+                <div class="answer-container" id="answer-container">
+                    <div class="answer-text" id="answer-text">No response yet</div>
+                </div>
+            </div>
+            
+            <!-- Charts -->
+            <div class="section">
+                <label>Visualizations</label>
+                <div id="charts-container">
+                    <div id="chart-container"></div>
+                </div>
+            </div>
+            
+            <!-- Videos -->
+            <div class="section">
+                <label>Videos</label>
+                <div id="videos-container"></div>
+            </div>
+            
+            <!-- Sources -->
+            <div class="section">
+                <label>Sources</label>
+                <div class="sources-list" id="sources-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let eventSource = null;
+        
+        async function submitQuery() {
+            const query = document.getElementById('query').value;
+            if (!query) return;
+            
+            // Clear previous
+            clearLog();
+            updateStatus('thinking', 'Analyzing...');
+            
+            try {
+                const response = await fetch('/agent/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        query: query,
+                        context: document.getElementById('contextenable').checked ? { test: true } : null,
+                        stream: document.getElementById('stream').checked
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data.trim()) {
+                                try {
+                                    const event = JSON.parse(data);
+                                    handleEvent(event);
+                                } catch (e) {
+                                    console.log('Parse error:', data);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                logEvent('error', { message: error.message });
+                updateStatus('error', 'Error: ' + error.message);
+            }
+        }
+        
+        function handleEvent(event) {
+            const type = event.type;
+            const data = event.data;
+            
+            logEvent(type, data);
+            
+            switch(type) {
+                case 'thinking':
+                    updateStatus('thinking', data.message || 'Thinking...');
+                    break;
+                    
+                case 'tool_call':
+                    updateStatus('processing', `Running ${data.tool}...`);
+                    break;
+                    
+                case 'tool_result':
+                    updateStatus('processing', `Got ${data.results_count} results`);
+                    break;
+                    
+                case 'chart':
+                    renderChart(data);
+                    break;
+                    
+                case 'video':
+                    renderVideo(data);
+                    break;
+                    
+                case 'source':
+                    // Sources handled in complete
+                    break;
+                    
+                case 'complete':
+                    updateStatus('complete', 'Complete');
+                    renderComplete(data);
+                    break;
+                    
+                case 'error':
+                    updateStatus('error', data.message);
+                    break;
+            }
+        }
+        
+        function logEvent(type, data) {
+            const log = document.getElementById('event-log');
+            const div = document.createElement('div');
+            div.className = `event ${type}`;
+            div.innerHTML = `
+                <div class="event-type">[${type.toUpperCase()}]</div>
+                <div class="event-data">${JSON.stringify(data, null, 2).slice(0, 500)}</div>
+            `;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function updateStatus(status, text) {
+            document.getElementById('status-indicator').className = `status ${status}`;
+            document.getElementById('status-text').textContent = text;
+        }
+        
+        function renderComplete(data) {
+            // Answer text
+            document.getElementById('answer-text').textContent = data.answer || '';
+            
+            // Render charts from complete event
+            if (data.charts && data.charts.length > 0) {
+                const chartData = data.charts[0];
+                renderChart(chartData);
+            }
+            
+            // Sources
+            const sourcesList = document.getElementById('sources-list');
+            sourcesList.innerHTML = '';
+            if (data.sources && data.sources.length > 0) {
+                for (const source of data.sources) {
+                    const div = document.createElement('div');
+                    div.className = 'source-item';
+                    div.innerHTML = `
+                        <strong>${source.document_name}</strong>
+                        <span class="source-score">Score: ${source.score.toFixed(2)}</span>
+                        <p>${source.text_preview || ''}</p>
+                    `;
+                    sourcesList.appendChild(div);
+                }
+            }
+            
+            // Charts (already rendered)
+            // Videos (already rendered)
+        }
+        
+        function renderChart(data) {
+            const container = document.getElementById('chart-container');
+            container.innerHTML = '<canvas id="chartCanvas"></canvas>';
+            
+            const ctx = document.getElementById('chartCanvas').getContext('2d');
+            
+            // Use data from agent or defaults
+            const labels = data.labels || ['Q1', 'Q2', 'Q3', 'Q4'];
+            const datasets = data.datasets || [{
+                label: 'Revenue',
+                data: [26, 28, 32, 39],
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+            }];
+            
+            const chartType = data.chart_type === 'doughnut' ? 'pie' : (data.chart_type || 'bar');
+            
+            new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: datasets.map(ds => ({
+                        ...ds,
+                        borderWidth: 2,
+                        fill: data.chart_type === 'line',
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: data.title || 'Chart' },
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+        
+        </script>
+        
+        function renderVideo(data) {
+            const container = document.getElementById('videos-container');
+            const div = document.createElement('div');
+            div.className = 'widget video';
+            div.innerHTML = `
+                <div class="video-embed">
+                    <iframe src="${data.url}" frameborder="0" allowfullscreen></iframe>
+                </div>
+                <p>${data.title}</p>
+            `;
+            container.appendChild(div);
+        }
+        
+        function clearLog() {
+            document.getElementById('event-log').innerHTML = '';
+            document.getElementById('answer-text').textContent = 'No response yet';
+            document.getElementById('sources-list').innerHTML = '';
+            document.getElementById('videos-container').innerHTML = '';
+            document.getElementById('chart-container').innerHTML = '';
+            updateStatus('', 'Ready');
+        }
+    </script>
+</body>
+</html>

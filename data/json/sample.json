@@ -1,0 +1,21 @@
+{
+  "report": "Quarterly Performance",
+  "employees": [
+    {
+      "name": "Alice",
+      "dept": "Engineering",
+      "projects": 12,
+      "revenue": 125000
+    },
+    {
+      "name": "Bob",
+      "dept": "Marketing",
+      "projects": 8,
+      "revenue": 95000
+    }
+  ],
+  "metrics": {
+    "total_revenue": 220000,
+    "avg_efficiency": 90
+  }
+}
